@@ -1,0 +1,4023 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>İnterval Koşu Analizi</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{ --bg:#f4f6f9; --card:#fff; --b:#e5e7eb; --accent:#2563eb; --muted:#475569; }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:Arial,Helvetica,sans-serif; background:var(--bg);}
+    header{padding:14px 18px; background:#0f172a; color:#fff; display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+    header h1{margin:0; font-size:18px; font-weight:600}
+    main{display:grid; grid-template-columns: 420px 1fr; gap:12px; padding:12px;}
+    aside{background:var(--card); border:1px solid var(--b); border-radius:10px; padding:12px; height: calc(100vh - 90px); overflow:auto;}
+    section{background:var(--card); border:1px solid var(--b); border-radius:10px; padding:12px; margin-bottom:12px;}
+    #map{height:320px; border-radius:10px;}
+    .controls{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+    button{border:1px solid var(--b); background:#fff; padding:8px 10px; border-radius:8px; cursor:pointer;}
+    button.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+    input[type="number"], input[type="text"], select{padding:7px 8px; border-radius:8px; border:1px solid var(--b); outline:none;}
+    input[type="number"]{width:92px;}
+    input.small{width:86px;}
+    .run-item{display:flex; align-items:center; justify-content:space-between; border:1px solid var(--b); padding:8px; margin:6px 0; border-radius:8px}
+    .run-item .meta{font-size:12px; color:#334155}
+    .run-item .name{font-weight:600}
+    table{width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden}
+    th,td{border:1px solid var(--b); padding:6px; font-size:13px; text-align:left; vertical-align:top}
+    .interval{background:#fee2e2}
+    .summary,.coach{background:#e0f2fe; padding:10px; border-radius:10px;}
+    canvas{background:#fff; border:1px solid var(--b); border-radius:10px; padding:8px}
+    .hr-badge{background:#f1f5f9; border:1px solid var(--b); padding:2px 6px; border-radius:6px; font-size:12px}
+    small.muted{color:var(--muted)}
+    .status{margin-left:8px; font-size:13px; opacity:.95}
+    .good{color:#16a34a;font-weight:600}
+    .bad{color:#dc2626;font-weight:600}
+
+    :fullscreen body { background: var(--bg); }
+    :fullscreen header { position: sticky; top: 0; z-index: 10; }
+    :fullscreen aside { height: calc(100vh - 90px); }
+
+    .grid3{display:grid; grid-template-columns: 1fr; gap:12px; justify-items:center;}
+    .trend-big{width:1100px; max-width:100%; height:320px; min-height:520px;}
+    .trend-big canvas{width:100% !important; height:100% !important;}
+
+    #bestEffortsPanel{
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 10px;
+      color:#fff;
+    }
+    #bestEffortsPanel .row{display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; font-size:13px;}
+    #bestEffortsPanel .pill{background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.14); padding: 6px 10px; border-radius: 999px; white-space:nowrap;}
+    #bestEffortsPanel details{margin-top:10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 8px 10px;}
+    #bestEffortsPanel summary{ cursor:pointer; font-weight:600; }
+    #bestEffortsList{margin-top:8px; display:grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap:6px 14px; font-size:13px;}
+    #bestEffortsList div{display:flex; justify-content:space-between; gap:10px; border-bottom: 1px dashed rgba(255,255,255,0.15); padding-bottom:4px;}
+
+    .trend-mini-grid{margin-top:12px; display:grid; grid-template-columns: repeat(3, minmax(280px, 1fr)); gap:12px;}
+    .trend-mini{background:#fff; border:1px solid var(--b); border-radius:10px; padding:10px;}
+    .trend-mini h4{margin:0 0 8px 0; font-size:14px; color:#0f172a;}
+    .trend-mini canvas{width:100% !important; height:180px !important; padding:0; border-radius:10px;}
+
+    @media (max-width: 1200px){
+      main{grid-template-columns: 1fr;}
+      aside{height:auto;}
+      .trend-big{height:440px; min-height:440px;}
+      #bestEffortsList{grid-template-columns:1fr;}
+      .trend-mini-grid{grid-template-columns:1fr;}
+
+
+    }
+    /* ✅ Orta boy grafik (diğerleri kadar olsun) */
+    .chartMedium{
+      height: 620px;          /* ← diğerleriyle aynı yapmak için burayı değiştir */
+      max-width: 1800px;
+      margin: 0 auto;
+    }
+
+    .chartMedium canvas{
+      width: 100% !important;
+      height: 100% !important;
+      padding: 0 !important;  /* istersen 8px bırak */
+    }
+
+    /* ✅ Cadence ↔ Stride grafikleri (ikisi de 300px) */
+.cadStrideBox{
+  max-width: 1900px;
+  margin: 0 auto;
+}
+
+.cadStrideBox .chartWrap{
+  height: 550px;   /* ✅ ikisi de 300px */
+  weight: 1100px;
+}
+
+#cadStrideTrend, #cadStrideSelected{
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;   /* canvas genel padding’ini burada kapat */
+  border-radius: 10px;
+}
+
+.bestSegMapsGrid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  gap:12px;
+}
+
+.bestSegMapCard{
+  background:#fff;
+  border:1px solid var(--b);
+  border-radius:12px;
+  padding:10px;
+}
+
+.bestSegMapCard h4{
+  margin:0 0 8px 0;
+  font-size:14px;
+  color:#0f172a;
+}
+
+.bestSegMapCanvas{
+  height:260px;
+  border:1px solid var(--b);
+  border-radius:10px;
+  overflow:hidden;
+}
+
+.bestSegMapMeta{
+  margin-top:8px;
+  font-size:12px;
+  color:#334155;
+  line-height:1.5;
+}
+
+.bestSegEmpty{
+  padding:18px 10px;
+  text-align:center;
+  color:#64748b;
+  font-size:13px;
+}
+
+@media (max-width: 1200px){
+  .bestSegMapsGrid{
+    grid-template-columns:1fr;
+  }
+}
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>🏃 GPX Dashboard</h1>
+
+  <div class="controls">
+    <input type="file" id="fileInput" accept=".gpx" multiple />
+    <button id="btnImport" class="primary">Seçili GPX’leri Yükle ve Kaydet</button>
+
+    <span style="margin-left:10px;">
+      HRmax:
+      <input type="number" id="hrMaxInput" min="120" max="240" value="175">
+      <small class="muted">(Zonlar %HRmax)</small>
+    </span>
+
+    <span style="margin-left:10px;">
+      Trend/Datasheet Filtre:
+      <select id="rangeFilter">
+        <option value="all">Tümü</option>
+        <option value="4">Son 4 gün</option>
+        <option value="7">Son 7 gün</option>
+        <option value="14">Son 14 gün</option>
+        <option value="21">Son 21 gün</option>
+        <option value="28">Son 28 gün</option>
+        <option value="30">Son 30 gün</option>
+        <option value="60">Son 60 gün</option>
+        <option value="90">Son 90 gün</option>
+        <option value="180">Son 180 gün</option>
+        <option value="365">Son 365 gün</option>
+      </select>
+    </span>
+
+    <button id="btnExportCSV">Trend Datasheet CSV İndir</button>
+
+    <button id="btnFullscreen" title="Tam ekran (F)" aria-label="Tam ekran" class="primary">
+      Tam ekran
+    </button>
+
+    <span id="status" class="status"></span>
+  </div>
+
+  <div id="bestEffortsPanel" aria-label="Filtreye göre özet ve best efforts">
+    <div class="row">
+      <span class="pill"><b>Activities:</b> <span id="statActivities">-</span></span>
+      <span class="pill"><b>Distance:</b> <span id="statDistance">-</span></span>
+      <span class="pill"><b>Time:</b> <span id="statTime">-</span></span>
+      <span class="pill"><b>Elev Gain:</b> <span id="statElev">-</span></span>
+      <span class="pill"><small>Filtre aralığına göre otomatik hesaplanır.</small></span>
+    </div>
+
+    <details>
+      <summary>🏅 Best Efforts (seçili tarih aralığı)</summary>
+      <div id="bestEffortsList"></div>
+      <small class="muted" style="color:#dbeafe;">
+        Not: Best Efforts GPX içindeki distance-time serisinden hesaplanır. Yeterli mesafe yoksa “-”.
+      </small>
+
+      <div style="margin-top:12px; width:100%; height:470px; max-width:1720px;">
+        <h4 style="margin:0 0 8px 0; font-size:14px;">📈 Best Efforts: Mesafe → Pace</h4>
+        <canvas id="bestEffortsPaceChart" style="width:100%; max-width:100%; height:150px; display:block; padding:0;"></canvas>
+        <small class="muted" style="color:#dbeafe;">
+          Pace (MM:SS/km). Daha hızlı pace üstte gösterilir.
+        </small>
+      </div>
+    </details>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <h3>📁 Kayıtlı Koşular</h3>
+    <div class="summary" style="margin-bottom:10px;">
+      Sol liste tüm koşuları gösterir. Üstteki filtre sadece Trend/Datasheet’e uygulanır.
+      <br><small class="muted">Not: file:// modunda IndexedDB engellenirse otomatik “geçici mod” çalışır.</small>
+    </div>
+    <div id="runList"></div>
+  </aside>
+
+  <div>
+    <section>
+      <h3>📌 Interval Trend Grafikleri</h3>
+      <div class="grid3">
+        <div class="trend-big">
+          <h4 style="margin:0 0 8px 0;">① Mesafe + Pace + Cadence</h4>
+          <canvas id="trendComboChart"></canvas>
+        </div>
+        <br>
+        <div class="trend-big">
+          <h4 style="margin:0 0 8px 0;">② Haftalık Toplam Interval Mesafesi</h4>
+          <canvas id="trendWeeklyChart"></canvas>
+        </div>
+        <br>
+        <div class="trend-big">
+          <h4 style="margin:0 0 8px 0;">③ Scatter: Interval Avg Pace vs Interval Mesafe</h4>
+          <canvas id="trendScatterChart"></canvas>
+        </div>
+
+        <br>
+        <div class="trend-big">
+          <h4 style="margin:0 0 8px 0;">④ Scatter: Best Efforts Pace vs Mesafe (Tüm Koşular)</h4>
+          <canvas id="bestEffortsScatterChart"></canvas>
+        </div>
+        <br>
+        <div class="trend-big">
+          <h4 style="margin:0 0 8px 0;">⑤ Koşu Bazlı: 04:00 Altı (≥3 sn) Toplamlar • Pace • Cadence • Stride (Filtreli)</h4>
+          <div class="summary" id="fastSegRunTrendSummary" style="margin-bottom:10px;">
+            Seçilen tarih aralığına göre, her koşudaki “04:00 altı ve ≥3 sn” parçaların toplam süre/mesafe ve ortalama pace/cadence/stride değerleri.
+          </div>
+          <canvas id="fastSegRunTrendChart"></canvas>
+          <small class="muted">
+            Bar: Süre (dk) + Mesafe (km) • Çizgi: Pace (ters) • Çizgi: Cadence (spm) • Çizgi: Stride (cm)
+          </small>
+        </div>
+      </div>
+      <br><br>
+    </section>
+    <!-- ✅ EK: Trend scatter (Tüm koşular) Cadence ↔ Stride -->
+    <section>
+      <h3>📌 Trend: Cadence ↔ Adım Uzunluğu (Filtreli Koşular)</h3>
+      <div class="summary" id="cadStrideTrendSummary" style="margin-bottom:10px;">
+        Filtreye uyan tüm koşuların GPX noktaları birleştirilir. (Otomatik downsample uygulanır.)
+      </div>
+
+  <div class="cadStrideBox">
+  <div class="chartWrap">
+    <canvas id="cadStrideTrend"></canvas>
+  </div>
+  </div>
+
+      <small class="muted">X: Cadence (spm) • Y: Adım Uzunluğu (cm) • Noktalar: GPX trackpoint</small>
+    </section>
+    <section>
+      <h3>🧾 Trend İstatistikleri</h3>
+      <div class="summary" style="margin-bottom:10px;">
+        ✅ Tablo <b>Aktivite Zamanı DESC</b> (en yeni en üst). Üst filtre uygulanır.
+      </div>
+      <div style="max-height:420px; overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Koşu Adı (Label)</th>
+              <th>Aktivite Zamanı</th>
+              <th>Toplam Mesafe</th>
+              <th>Toplam Süre</th>
+              <th>Avg Pace</th>
+              <th>Interval Sayısı</th>
+              <th>Interval Mesafe</th>
+              <th>Interval Süre</th>
+              <th>Interval Avg Pace</th>
+              <th>Interval Yoğunluğu</th>
+              <th>En Hızlı Interval Pace</th>
+              <th>En Uzun Interval</th>
+              <th>Avg HR</th>
+              <th>Max HR</th>
+              <th>Avg Cad</th>
+              <th>Max Cad</th>
+              <th>Z4+Z5 Süre</th>
+            </tr>
+          </thead>
+          <tbody id="trendTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="trend-mini-grid" id="trendMiniGrid">
+        <div class="trend-mini"><h4>Avg Pace (MM:SS/km)</h4><canvas id="miniAvgPace"></canvas></div>
+        <div class="trend-mini"><h4>Interval Sayısı</h4><canvas id="miniIntervalCount"></canvas></div>
+        <div class="trend-mini"><h4>Interval Mesafe (km)</h4><canvas id="miniIntervalKm"></canvas></div>
+
+        <div class="trend-mini"><h4>Interval Süre (dk)</h4><canvas id="miniIntervalTime"></canvas></div>
+        <div class="trend-mini"><h4>Interval Avg Pace (MM:SS/km)</h4><canvas id="miniIntervalAvgPace"></canvas></div>
+        <div class="trend-mini"><h4>Interval Yoğunluğu (%)</h4><canvas id="miniIntervalDensity"></canvas></div>
+
+        <div class="trend-mini"><h4>En Hızlı Interval Pace (MM:SS/km)</h4><canvas id="miniBestIntervalPace"></canvas></div>
+        <div class="trend-mini"><h4>En Uzun Interval (m)</h4><canvas id="miniLongestInterval"></canvas></div>
+        <div class="trend-mini"><h4>Avg HR (bpm)</h4><canvas id="miniAvgHR"></canvas></div>
+
+        <div class="trend-mini"><h4>Max HR (bpm)</h4><canvas id="miniMaxHR"></canvas></div>
+        <div class="trend-mini"><h4>Avg Cad (spm)</h4><canvas id="miniAvgCad"></canvas></div>
+        <div class="trend-mini"><h4>Max Cad (spm)</h4><canvas id="miniMaxCad"></canvas></div>
+
+        <div class="trend-mini"><h4>Z4+Z5 Süre (dk)</h4><canvas id="miniZ45"></canvas></div>
+      </div>
+    </section>
+
+
+
+    <section class="summary">
+      <h3>📊 Seçili Koşu Özeti</h3>
+      <div id="runSummary">Bir koşu seçin veya GPX yükleyin.</div>
+    </section>
+
+    <section class="coach">
+      <h3>🧠 Antrenman Özeti</h3>
+      <div id="intervalSummary"></div>
+      <div id="coachComment" style="margin-top:8px;"></div>
+    </section>
+
+    <section>
+      <h3>🔥 Algılanan Intervaller</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Başlangıç</th><th>Bitiş</th>
+            <th>Süre (sn)</th><th>Mesafe</th><th>Pace</th><th>HR</th><th>Cadence</th><th>Mesafe aralığı</th>
+          </tr>
+        </thead>
+        <tbody id="intervalTable"></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h3>⚡ GPX: 04:00 Pace Altı Parçalar (Min 3 sn)</h3>
+      <div id="fastSegSummary" class="summary" style="margin-bottom:10px;">
+        GPX’te ardışık noktalar arası anlık pace &lt; 04:00 olan ve en az 3 saniye süren kesintisiz bloklar.
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Başlangıç</th>
+            <th>Bitiş</th>
+            <th>Süre (sn)</th>
+            <th>Mesafe</th>
+            <th>Avg Pace</th>
+            <th>En Hızlı</th>
+            <th>HR</th>
+            <th>Cadence</th>
+            <th>Mesafe aralığı</th>
+          </tr>
+        </thead>
+        <tbody id="fastSegTable"></tbody>
+      </table>
+      <small class="muted">Bu bölüm “Algılanan Intervaller”den bağımsızdır (GPX segment pace’i üzerinden hesaplanır).</small>
+    </section>
+    <div style="margin-top:15px;">
+  <h4>📊 04:00 Altı Pace Segments Grafik (Mesafe + Pace + HR + Cadence)</h4>
+  <div style="width:100%; height:450px;">
+    <canvas id="fastSegChart"></canvas>
+  </div>
+</div>
+    <section>
+    <h3>📈 05:30 Altı Pace Blokları (Süre + Pace + En Hızlı Pace + HR + Cadence)</h3>
+
+    <div id="pace530Summary" class="summary" style="margin-bottom:10px;">
+      Seçili koşuda pace ≤ 05:30 olan kesintisiz bloklar (min süre: 10 sn).
+    </div>
+
+    <div class="chartMedium">
+      <canvas id="pace530ComboChart"></canvas>
+    </div>
+
+    <small class="muted">
+      Sol: Süre (sn) • Sol2: Cadence (spm) • Sağ: Pace (MM:SS, ters) • Sağ2: HR (bpm)
+    </small>
+  </section>
+    <section>
+      <h3>📈 05:00 pace altı pace blokları (Süre + Pace + Max Pace + HR + Cadence)</h3>
+      <div class="controls" style="margin:6px 0 10px 0;">
+        <label>Hedef Pace:</label>
+        <input id="targetPaceMin" class="small" type="text" value="04:00" />
+        <span>–</span>
+        <input id="targetPaceMax" class="small" type="text" value="04:30" />
+        <label style="margin-left:10px;">
+          <input id="showTargetBand" type="checkbox" checked />
+          Bandı göster
+        </label>
+      </div>
+      <canvas id="intervalComboChart"></canvas>
+      <div id="targetBandSummary" class="summary" style="margin-top:10px;"></div>
+      <small class="muted">
+        Sol: Süre (sn) • Sol2: Cadence (spm) • Sağ: Pace (MM:SS, ters) • Sağ2: HR (bpm)
+      </small>
+    </section>
+    <!-- ✅ EK: Seçili koşu scatter Cadence ↔ Stride -->
+    <section>
+      <h3>👟 Seçili Koşu: Cadence ↔ Adım Uzunluğu</h3>
+      <div class="summary" id="cadStrideSelectedSummary" style="margin-bottom:10px;">
+        Seçili koşunun GPX noktaları (otomatik downsample uygulanır).
+      </div>
+
+  <div class="cadStrideBox">
+  <div class="chartWrap">
+    <canvas id="cadStrideSelected"></canvas>
+  </div>
+  </div>
+
+      <small class="muted">X: Cadence (spm) • Y: Adım Uzunluğu (cm) • Noktalar: GPX trackpoint</small>
+
+      <!-- ✅ EK: Stride seç → cadence frekansı -->
+<div style="margin-top:14px;">
+  <h4 style="margin:0 0 8px 0;">📊 Stride seç → Cadence kaç kez?</h4>
+
+  <div class="controls" style="margin:6px 0 10px 0;">
+    <label>Adım Uzunluğu (cm):</label>
+    <select id="strideSelect"></select>
+    <span id="strideCadSummary" class="summary" style="padding:6px 10px; margin:0;">
+      Bir stride seçin.
+    </span>
+  </div>
+
+  <div class="cadStrideBox">
+    <div class="chartWrap">
+      <canvas id="strideCadenceHist"></canvas>
+    </div>
+  </div>
+
+  <small class="muted">X: Cadence (spm) • Y: Frekans (adet) • Seçili stride’a göre filtrelenmiş GPX noktaları</small>
+</div>
+    </section>
+    <section>
+      <h3>❤️ HR Zone Dağılımı(Koşunun Tamamı)</h3>
+      <div id="hrSummary" class="summary" style="margin-bottom:10px;"></div>
+      <canvas id="hrZoneChart"></canvas>
+      <div style="margin-top:8px;">
+        <small class="muted">Zonlar: Z1 50–60%, Z2 60–70%, Z3 70–80%, Z4 80–90%, Z5 90–100% (HRmax bazlı)</small>
+      </div>
+    </section>
+
+
+
+    <section>
+      <h3>🗺️ Interval konumları (Sadece pace &lt;= 05:00 olan kısımları gösteriyor)</h3>
+      <div id="map"></div>
+      <small class="muted">
+        Harita: Pace'e göre renkli çizim • pace &gt; 5:00 segmentler gizlenir (yalnızca 5:00 ve daha hızlı gösterilir).
+      </small>
+    </section>
+    <section>
+  <h3>🗺️ Seçili Koşu: Best Efforts Konum Haritaları</h3>
+
+  <div id="selectedBestSegSummary" class="summary" style="margin-bottom:10px;">
+    Bir koşu seçildiğinde en hızlı 100m / 200m / 300m / 400m / 800m / 1000m / 1600m / 2000m / 2400m segmentleri ayrı haritalarda gösterilir.
+  </div>
+
+  <div id="selectedBestSegMapsWrap" class="bestSegMapsGrid"></div>
+
+  <small class="muted">
+    Her kart tek mesafeyi gösterir. Yalnızca seçili koşuya ait en hızlı segment çizilir.
+  </small>
+</section>
+  </div>
+</main>
+
+<script>
+/* ==========================
+   Kurallar
+========================== */
+const MIN_INTERVAL_DURATION = 10; // sn
+const MAX_INTERVAL_PACE = 5.0;    // dk/km
+const PACE_SHOW_MAX_MIN = 5.0;    // map'te pace > 5:00 gizli
+
+// ✅ GPX fast parça kuralları
+const FAST_PACE_THRESHOLD = 4.0; // 04:00 altı => pace < 4.0
+const FAST_MIN_CONT_SEC   = 3;   // >= 3 sn
+const FAST_MAX_GAP_SEC    = 20;  // gap > 20 sn => blok kır
+// ✅ Tıklanan cadence barını histogramda vurgulamak için
+let selectedCadenceForHist = null;
+let fastSegChart = null;
+/* ==========================
+   IndexedDB (ve file:// fallback)
+========================== */
+const DB_NAME = "RunDB";
+const DB_VERSION = 3;
+let db = null;
+// ✅ EK: 05:30 altı pace blokları
+const PACE530_THRESHOLD = 5.5; // 05:30/km => 5.5
+const PACE530_MIN_CONT_SEC = 3; // min 10 sn (istersen 3 de yapabilirsin)
+const PACE530_MAX_GAP_SEC  = 10; // dt > 20 sn => blok kır
+const pace530SummaryEl = document.getElementById("pace530Summary");
+const pace530Canvas = document.getElementById("pace530ComboChart");
+const selectedBestSegSummaryEl = document.getElementById("selectedBestSegSummary");
+const selectedBestSegMapsWrapEl = document.getElementById("selectedBestSegMapsWrap");
+let pace530ComboChart = null;
+function renderFastSegmentsChart(fastSegs){
+  try{
+    const canvas = document.getElementById("fastSegChart");
+    if(!canvas) return;
+
+    if(fastSegChart){
+      fastSegChart.destroy();
+      fastSegChart = null;
+    }
+
+    if(!fastSegs || !fastSegs.length) return;
+
+    const labels = fastSegs.map(s => `#${s.id}`);
+
+    const distData = fastSegs.map(s => s.dist ? s.dist / 1000 : null); // km
+    const paceData = fastSegs.map(s => s.pace);
+    const bestData = fastSegs.map(s => s.paceBest);
+    const hrData   = fastSegs.map(s => s.hrAvg);
+    const cadData  = fastSegs.map(s => s.cadAvg);
+
+    fastSegChart = new Chart(canvas.getContext("2d"),{
+      plugins: [targetBandPlugin],
+      data:{
+        labels,
+        datasets:[
+          {
+            type:"bar",
+            label:"Mesafe (km)",
+            data: distData,
+            yAxisID:"yDist",
+            backgroundColor:"rgba(37,99,235,0.25)",
+            borderColor:"#2563eb",
+            borderWidth:1
+          },
+          {
+            type:"line",
+            label:"Avg Pace",
+            data: paceData,
+            yAxisID:"yPace",
+            borderColor:"#000000",
+            tension:0.25
+          },
+          {
+            type:"line",
+            label:"En Hızlı Pace",
+            data: bestData,
+            yAxisID:"yPace",
+            borderColor:"#7c3aed",
+            borderDash:[6,4],
+            tension:0.25
+          },
+          {
+            type:"line",
+            label:"HR",
+            data: hrData,
+            yAxisID:"yHR",
+            borderColor:"#e11d48",
+            tension:0.25,
+            spanGaps:true
+          },
+          {
+            type:"line",
+            label:"Cadence",
+            data: cadData,
+            yAxisID:"yCad",
+            borderColor:"#10b981",
+            tension:0.25,
+            spanGaps:true
+          }
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        interaction:{ mode:"nearest", intersect:false },
+        scales:{
+          yDist:{
+            position:"left",
+            title:{display:true,text:"Mesafe (km)"}
+          },
+          yPace:{
+            position:"right",
+            reverse:true,
+            grid:{drawOnChartArea:false},
+            title:{display:true,text:"Pace (MM:SS)"},
+            ticks:{ callback:(v)=>formatPace(v) }
+          },
+          yHR:{
+            position:"right",
+            offset:true,
+            grid:{drawOnChartArea:false},
+            title:{display:true,text:"HR"}
+          },
+          yCad:{
+            position:"left",
+            offset:true,
+            grid:{drawOnChartArea:false},
+            title:{display:true,text:"Cadence"}
+          }
+        },
+        plugins:{
+          legend:{ display:true },
+
+  targetBandPlugin:{
+    enabled: true,
+    ranges:[
+      {
+        min: parsePaceMMSS("03:30"),
+        max: parsePaceMMSS("04:00"),
+        color:"rgba(59,130,246,0.15)"   // 🔵 hızlı zone
+      },
+      {
+        min: parsePaceMMSS("04:00"),
+        max: parsePaceMMSS("04:30"),
+        color:"rgba(34,197,94,0.15)"    // 🟩 race pace
+      }]
+  }
+
+        }
+      }
+    });
+
+  }catch(e){
+    console.warn("fast segment chart error:", e);
+  }
+}
+
+/* ==========================
+   ✅ YENİ: Koşu bazlı “04:00 altı (≥3 sn)” trend (filtreli)
+   Kaynak: detectFastPaceSegmentsFromParsed(parseGPX(run.gpxText))
+========================== */
+function renderFastSegRunTrend(allRuns){
+  try{
+    if(typeof Chart === "undefined") return;
+
+    const canvas = document.getElementById("fastSegRunTrendChart");
+    const summaryEl = document.getElementById("fastSegRunTrendSummary");
+    if(!canvas) return;
+
+    if(fastSegRunTrendChart){
+      fastSegRunTrendChart.destroy();
+      fastSegRunTrendChart = null;
+    }
+
+    const filtered = filterRunsByRange(allRuns || []);
+    if(!filtered.length){
+      if(summaryEl) summaryEl.innerHTML = "Filtreye uyan koşu yok.";
+      return;
+    }
+
+    // Grafikte koşu sırası: istersen DESC yerine bu şekilde isim sıralı kullanıyoruz.
+    // (Trend grafikleri zaten sortRunsByName ile gidiyor. Aynısını burada da kullanıyoruz.)
+    const sorted = sortRunsByName(filtered);
+    const labels = makeUniqueLabels(sorted.map(r => r.name || "Run"));
+
+    // Seri verileri
+    const totalMinArr = [];   // bar: dk
+    const totalKmArr  = [];   // bar: km
+    const avgPaceArr  = [];   // line: min/km (reverse)
+    const avgCadArr   = [];   // line: spm
+    const avgStrideArr= [];   // line: cm
+
+    let runsWithFast = 0;
+    let sumAllSec = 0;
+    let sumAllM = 0;
+
+    for(const run of sorted){
+      if(!run?.gpxText){
+        totalMinArr.push(null);
+        totalKmArr.push(null);
+        avgPaceArr.push(null);
+        avgCadArr.push(null);
+        avgStrideArr.push(null);
+        continue;
+      }
+
+      let parsed;
+      try{
+        parsed = parseGPX(run.gpxText);
+      }catch(e){
+        totalMinArr.push(null);
+        totalKmArr.push(null);
+        avgPaceArr.push(null);
+        avgCadArr.push(null);
+        avgStrideArr.push(null);
+        continue;
+      }
+
+      const segs = detectFastPaceSegmentsFromParsed(parsed) || [];
+      if(!segs.length){
+        totalMinArr.push(0);
+        totalKmArr.push(0);
+        avgPaceArr.push(null);
+        avgCadArr.push(null);
+        avgStrideArr.push(null);
+        continue;
+      }
+
+      runsWithFast++;
+
+      const totSec = segs.reduce((a,s)=>a + (s.time||0), 0);
+      const totM   = segs.reduce((a,s)=>a + (s.dist||0), 0);
+
+      sumAllSec += totSec;
+      sumAllM   += totM;
+
+      // Ortalama pace: toplam süre / toplam km
+      const avgPace = (totM > 0) ? ((totSec/60) / (totM/1000)) : null;
+
+      // Cadence & Stride: süre ağırlıklı ortalama
+      let cadWSum=0, cadTSum=0;
+      let strideWSum=0, strideTSum=0;
+
+      for(const s of segs){
+        const sec = Number(s.time||0);
+        if(!(sec>0)) continue;
+
+        const cad = normalizeCadValue(s.cadAvg);
+        if(isFinite(cad)){
+          cadWSum += cad * sec;
+          cadTSum += sec;
+        }
+
+        // stride: segmentin avg pace + cad’inden
+        const stride = strideCmFromPaceCad(s.pace, cad);
+        if(isFinite(stride)){
+          strideWSum += stride * sec;
+          strideTSum += sec;
+        }
+      }
+
+      const avgCad = (cadTSum>0) ? (cadWSum/cadTSum) : null;
+      const avgStride = (strideTSum>0) ? (strideWSum/strideTSum) : null;
+
+      totalMinArr.push(+((totSec/60).toFixed(1)));
+      totalKmArr.push(+((totM/1000).toFixed(2)));
+      avgPaceArr.push(avgPace);
+      avgCadArr.push(avgCad);
+      avgStrideArr.push(avgStride);
+    }
+
+    // Üst özet
+    const sumAllKm = sumAllM/1000;
+    const paceAll = (sumAllKm>0) ? ((sumAllSec/60)/sumAllKm) : null;
+
+    if(summaryEl){
+      summaryEl.innerHTML =
+        `Koşu: <b>${sorted.length}</b> • Hızlı parça bulunan koşu: <b>${runsWithFast}</b> • Toplam hızlı süre: <b>${(sumAllSec/60).toFixed(1)} dk</b>` +
+        ` • Toplam hızlı mesafe: <b>${sumAllKm.toFixed(2)} km</b> • Genel ort pace: <b>${formatPace(paceAll)}/km</b>`;
+    }
+
+    // Grafik (mixed)
+    fastSegRunTrendChart = new Chart(canvas.getContext("2d"),{
+      plugins:[targetBandPlugin],
+      data:{
+        labels,
+        datasets:[
+          {
+            type:"bar",
+            label:"Toplam Süre (dk)",
+            data: totalMinArr,
+            yAxisID:"yTime",
+            backgroundColor:"rgba(245, 158, 11, 0.25)",
+            borderColor:"#f59e0b",
+            borderWidth:1,
+            order:2
+          },
+          {
+            type:"bar",
+            label:"Toplam Mesafe (km)",
+            data: totalKmArr,
+            yAxisID:"yKm",
+            backgroundColor:"rgba(37, 99, 235, 0.18)",
+            borderColor:"#2563eb",
+            borderWidth:1,
+            order:1
+          },
+          {
+            type:"line",
+            label:"Ort Pace",
+            data: avgPaceArr,
+            yAxisID:"yPace",
+            borderColor:"#000000",
+            tension:0.25,
+            spanGaps:true,
+            pointRadius:(ctx)=> (ctx.raw==null ? 0 : 3),
+            pointHoverRadius:(ctx)=> (ctx.raw==null ? 0 : 5),
+            order:0
+          },
+          {
+            type:"line",
+            label:"Ort Cadence (spm)",
+            data: avgCadArr,
+            yAxisID:"yCad",
+            borderColor:"#16a34a",
+            tension:0.25,
+            spanGaps:true,
+            pointRadius:(ctx)=> (ctx.raw==null ? 0 : 2),
+            pointHoverRadius:(ctx)=> (ctx.raw==null ? 0 : 4),
+            order:0
+          },
+          {
+            type:"line",
+            label:"Ort Stride (cm)",
+            data: avgStrideArr,
+            yAxisID:"yStride",
+            borderColor:"#0ea5e9",
+            tension:0.25,
+            spanGaps:true,
+            pointRadius:(ctx)=> (ctx.raw==null ? 0 : 2),
+            pointHoverRadius:(ctx)=> (ctx.raw==null ? 0 : 4),
+            order:0
+          }
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        interaction:{ mode:"nearest", intersect:false },
+        scales:{
+          yTime:{ position:"left", title:{display:true,text:"Süre (dk)"} },
+          yKm:{ position:"left", offset:true, grid:{drawOnChartArea:false}, title:{display:true,text:"Mesafe (km)"} },
+
+          yPace:{ position:"right", reverse:true, grid:{drawOnChartArea:false},
+            title:{display:true,text:"Pace (MM:SS/km)"}, ticks:{ callback:(v)=> formatPace(v) } },
+
+          yCad:{ position:"right", offset:true, grid:{drawOnChartArea:false}, title:{display:true,text:"Cadence (spm)"} },
+
+          yStride:{ position:"right", offset:true, grid:{drawOnChartArea:false}, title:{display:true,text:"Stride (cm)"} },
+
+          x:{ ticks:{ maxRotation:45, minRotation:45, autoSkip:true } }
+        },
+        plugins:{
+          legend:{ display:false },
+
+ targetBandPlugin:{
+    enabled:true,
+    ranges:[
+      {
+        min: parsePaceMMSS("03:30"),
+        max: parsePaceMMSS("04:00"),
+        color:"rgba(59,130,246,0.15)"   // 🔵 hızlı zone
+      },
+      {
+        min: parsePaceMMSS("04:00"),
+        max: parsePaceMMSS("04:30"),
+        color:"rgba(34,197,94,0.15)"    // 🟩 race pace
+      }]
+  },
+
+          tooltip:{
+            callbacks:{
+              label:(ctx)=>{
+                const label = ctx.dataset.label || "";
+                const v = ctx.raw;
+                if(label.includes("Pace")) return `${label}: ${v==null? "-": formatPace(v)}/km`;
+                if(label.includes("Stride")) return `${label}: ${v==null? "-": (+v).toFixed(1)} cm`;
+                if(label.includes("Cadence")) return `${label}: ${v==null? "-": (+v).toFixed(0)} spm`;
+                if(label.includes("Mesafe")) return `${label}: ${v==null? "-": (+v).toFixed(2)} km`;
+                if(label.includes("Süre")) return `${label}: ${v==null? "-": (+v).toFixed(1)} dk`;
+                return `${label}: ${v}`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+  }catch(e){
+    console.warn("renderFastSegRunTrend error:", e);
+  }
+}
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      let store;
+      if(!db.objectStoreNames.contains("runs")){
+        store = db.createObjectStore("runs", { keyPath:"id" });
+      } else {
+        store = req.transaction.objectStore("runs");
+      }
+      if(!store.indexNames.contains("activityStart")) store.createIndex("activityStart", "activityStart", { unique:false });
+      if(!store.indexNames.contains("createdAt")) store.createIndex("createdAt", "createdAt", { unique:false });
+      if(!store.indexNames.contains("name")) store.createIndex("name", "name", { unique:false });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function dbAddRun(run){ return new Promise((res,rej)=>{ const tx=db.transaction("runs","readwrite"); tx.objectStore("runs").put(run); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+function dbGetAllRuns(){ return new Promise((res,rej)=>{ const tx=db.transaction("runs","readonly"); const req=tx.objectStore("runs").getAll(); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); }); }
+function dbGetRun(id){ return new Promise((res,rej)=>{ const tx=db.transaction("runs","readonly"); const req=tx.objectStore("runs").get(id); req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); }); }
+function dbDeleteRun(id){ return new Promise((res,rej)=>{ const tx=db.transaction("runs","readwrite"); tx.objectStore("runs").delete(id); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+
+/* Memory fallback (file:// için) */
+const Store = { mode:"unknown", mem:new Map() };
+
+async function memAdd(run){ Store.mem.set(run.id, run); }
+async function memAll(){ return Array.from(Store.mem.values()); }
+async function memGet(id){ return Store.mem.get(id) || null; }
+async function memDel(id){ Store.mem.delete(id); }
+
+async function safeOpenDB(){
+  try{
+    db = await openDB();
+    Store.mode = "idb";
+    setStatus(location.protocol==="file:" ? "ℹ️ file:// (IndexedDB aktif)" : "✅ IndexedDB aktif", "good");
+  }catch(e){
+    console.warn("IndexedDB açılamadı -> memory moda düşüldü:", e);
+    Store.mode = "memory";
+    setStatus("⚠️ Geçici mod: kayıtlar sayfa kapanınca silinir (IndexedDB yok)", "bad");
+    db = null;
+  }
+}
+async function addRun(run){ return Store.mode==="idb" ? dbAddRun(run) : memAdd(run); }
+async function getAllRuns(){ return Store.mode==="idb" ? dbGetAllRuns() : memAll(); }
+async function getRun(id){ return Store.mode==="idb" ? dbGetRun(id) : memGet(id); }
+async function deleteRun(id){ return Store.mode==="idb" ? dbDeleteRun(id) : memDel(id); }
+
+/* ==========================
+   UI refs
+========================== */
+const fileInput = document.getElementById("fileInput");
+const btnImport = document.getElementById("btnImport");
+const btnExportCSV = document.getElementById("btnExportCSV");
+const statusEl = document.getElementById("status");
+
+const runListEl = document.getElementById("runList");
+const runSummaryEl = document.getElementById("runSummary");
+const intervalTableEl = document.getElementById("intervalTable");
+const intervalSummaryEl = document.getElementById("intervalSummary");
+const coachCommentEl = document.getElementById("coachComment");
+const hrSummaryEl = document.getElementById("hrSummary");
+const trendTableBody = document.getElementById("trendTableBody");
+
+const hrMaxInput = document.getElementById("hrMaxInput");
+const rangeFilterEl = document.getElementById("rangeFilter");
+
+const targetPaceMinEl = document.getElementById("targetPaceMin");
+const targetPaceMaxEl = document.getElementById("targetPaceMax");
+const showTargetBandEl = document.getElementById("showTargetBand");
+const targetBandSummaryEl = document.getElementById("targetBandSummary");
+
+const btnFullscreen = document.getElementById("btnFullscreen");
+
+const statActivitiesEl = document.getElementById("statActivities");
+const statDistanceEl   = document.getElementById("statDistance");
+const statTimeEl       = document.getElementById("statTime");
+const statElevEl       = document.getElementById("statElev");
+const bestEffortsListEl= document.getElementById("bestEffortsList");
+
+// ✅ fast segment UI
+const fastSegSummaryEl = document.getElementById("fastSegSummary");
+const fastSegTableEl   = document.getElementById("fastSegTable");
+
+/* Mini canvases */
+const miniAvgPaceEl           = document.getElementById("miniAvgPace");
+const miniIntervalCountEl     = document.getElementById("miniIntervalCount");
+const miniIntervalKmEl        = document.getElementById("miniIntervalKm");
+const miniIntervalTimeEl      = document.getElementById("miniIntervalTime");
+const miniIntervalAvgPaceEl   = document.getElementById("miniIntervalAvgPace");
+const miniIntervalDensityEl   = document.getElementById("miniIntervalDensity");
+const miniBestIntervalPaceEl  = document.getElementById("miniBestIntervalPace");
+const miniLongestIntervalEl   = document.getElementById("miniLongestInterval");
+const miniAvgHREl             = document.getElementById("miniAvgHR");
+const miniMaxHREl             = document.getElementById("miniMaxHR");
+const miniAvgCadEl            = document.getElementById("miniAvgCad");
+const miniMaxCadEl            = document.getElementById("miniMaxCad");
+const miniZ45El               = document.getElementById("miniZ45");
+
+/* ✅ EK: stride scatter canvas + summary */
+const cadStrideSelectedCanvas = document.getElementById("cadStrideSelected");
+const cadStrideTrendCanvas    = document.getElementById("cadStrideTrend");
+const cadStrideSelectedSummaryEl = document.getElementById("cadStrideSelectedSummary");
+const cadStrideTrendSummaryEl    = document.getElementById("cadStrideTrendSummary");
+/* ✅ EK: Stride → Cadence frekans grafiği UI */
+const strideSelectEl = document.getElementById("strideSelect");
+const strideCadSummaryEl = document.getElementById("strideCadSummary");
+const strideCadenceHistCanvas = document.getElementById("strideCadenceHist");
+let strideCadenceHistChart = null;
+
+/* Seçili koşunun stride-cad ham noktalarını saklayalım (tekrarlar dahil) */
+let selectedStrideCadPoints = []; // [{x:cad, y:stride}, ...]
+/* ==========================
+   Helpers
+========================== */
+const avg = a => a.reduce((x,y)=>x+y,0)/a.length;
+
+function setStatus(msg, cls){
+  statusEl.textContent = msg || "";
+  statusEl.className = "status " + (cls || "");
+}
+
+function median(arr){
+  const a=arr.filter(v=>v!=null && isFinite(v)).slice().sort((x,y)=>x-y);
+  if(!a.length) return null;
+  const m=Math.floor(a.length/2);
+  return a.length%2 ? a[m] : (a[m-1]+a[m])/2;
+}
+function makeUniqueLabels(labels){
+  const seen=new Map();
+  return labels.map(l=>{
+    const key=String(l??"");
+    const n=(seen.get(key)||0)+1;
+    seen.set(key,n);
+    return n===1?key:`${key} (${n})`;
+  });
+}
+function fmtTimeISO(t){ return t.toISOString().substr(11,8); }
+function fmtDateTimeTR(isoOrMs){
+  const d=(typeof isoOrMs==="string")?new Date(isoOrMs):new Date(isoOrMs);
+  return d.toLocaleString("tr-TR",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+function formatPace(p){
+  if(p==null || !isFinite(p)) return "-";
+  const s=Math.round(p*60);
+  return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+}
+// ✅ Pace ekseni için ortak ticks ayarı
+function paceTicks(maxTicks = 14){
+  return {
+    callback: (v) => formatPace(v),
+    autoSkip: false,       // ✅ etiketleri seyrekleştirme
+    maxTicksLimit: maxTicks,
+    padding: 6
+  };
+}
+
+// Mini grafikler için daha az ama yine sık
+function paceTicksMini(maxTicks = 10){
+  return {
+    callback: (v) => formatPace(v),
+    autoSkip: false,
+    maxTicksLimit: maxTicks,
+    padding: 4
+  };
+}
+/* ==========================
+   ✅ Global tooltip: Pace değerlerini MM:SS formatında göster
+========================== */
+function _isPaceTooltip(ctx){
+  try{
+    const dsLabel = String(ctx?.dataset?.label || "").toLowerCase();
+
+    // 1) Dataset label içeriyorsa: Avg Pace, Max Pace, Ort Pace vs.
+    if(dsLabel.includes("pace")) return true;
+
+    // 2) Dataset yAxisID -> scale title text Pace/MM:SS içeriyorsa (scatter gibi)
+    const axisId = ctx?.dataset?.yAxisID || "y";
+    const scale = ctx?.chart?.scales?.[axisId] || ctx?.chart?.scales?.y;
+    const titleText = String(scale?.options?.title?.text || "").toLowerCase();
+    if(titleText.includes("pace") || titleText.includes("mm:ss")) return true;
+
+    return false;
+  }catch(e){
+    return false;
+  }
+}
+
+// Chart.js load olmuşsa global tooltip override
+if(typeof Chart !== "undefined"){
+  const prevLabelCb = Chart.defaults?.plugins?.tooltip?.callbacks?.label;
+
+  Chart.defaults.plugins.tooltip.callbacks.label = (ctx)=>{
+    // Pace ise MM:SS formatla
+    if(_isPaceTooltip(ctx)){
+      // Chart.js parsed değeri (line/scatter için y)
+      let v = null;
+
+      if(ctx?.parsed != null && typeof ctx.parsed === "object"){
+        v = (ctx.parsed.y != null) ? ctx.parsed.y : ctx.parsed;
+      }else{
+        v = (ctx?.parsed != null) ? ctx.parsed : ctx?.raw;
+      }
+
+      const lbl = ctx?.dataset?.label ? (ctx.dataset.label + ": ") : "Pace: ";
+      return lbl + formatPace(v);
+    }
+
+    // Pace değilse eski davranış (varsayılan ya da önceki set edilmiş callback)
+    if(typeof prevLabelCb === "function"){
+      return prevLabelCb(ctx);
+    }
+
+    // Fallback: varsayılan basit gösterim
+    const ds = ctx?.dataset?.label || "";
+    const val = (ctx?.parsed != null && typeof ctx.parsed === "object")
+      ? (ctx.parsed.y ?? ctx.parsed)
+      : (ctx?.parsed ?? ctx?.raw);
+
+    return (ds ? ds + ": " : "") + (val == null ? "-" : val);
+  };
+}
+function parsePaceMMSS(s){
+  const m = String(s||"").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  const mm=parseInt(m[1],10), ss=parseInt(m[2],10);
+  if(isNaN(mm)||isNaN(ss)||ss>59) return null;
+  return mm + ss/60;
+}
+function paceColor(pace, bandMin, bandMax){
+  if(pace==null || !isFinite(pace)) return "#94a3b8";
+  if(bandMin==null || bandMax==null) return "#111827";
+  if(pace < bandMin) return "#2563eb";
+  if(pace > bandMax) return "#ef4444";
+  return "#16a34a";
+}
+function haversine(a,b){
+  const R=6371;
+  const dLat=(b[0]-a[0])*Math.PI/180;
+  const dLon=(b[1]-a[1])*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function isoWeekKey(date){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  const dayNum=d.getUTCDay()||7;
+  d.setUTCDate(d.getUTCDate()+4-dayNum);
+  const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const weekNo=Math.ceil((((d-yearStart)/86400000)+1)/7);
+  const y=d.getUTCFullYear();
+  return `${y}-W${String(weekNo).padStart(2,"0")}`;
+}
+function formatTotalTime(sec){
+  if(sec==null || !isFinite(sec)) return "-";
+  sec=Math.max(0,Math.round(sec));
+  const h=Math.floor(sec/3600);
+  const m=Math.floor((sec%3600)/60);
+  if(h>0) return `${h}h ${m}m`;
+  const s=sec%60;
+  return `${m}m ${s}s`;
+}
+function formatDurationShort(sec){
+  if(sec==null || !isFinite(sec)) return "-";
+  sec=Math.max(0,Math.round(sec));
+  const h=Math.floor(sec/3600);
+  const m=Math.floor((sec%3600)/60);
+  const s=sec%60;
+  if(h>0) return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${m}:${String(s).padStart(2,"0")}`;
+}
+function filterRunsByRange(runs){
+  const v=rangeFilterEl.value;
+  if(v==="all") return runs;
+  const days=parseInt(v,10);
+  const cutoff=Date.now()-days*86400000;
+  return runs.filter(r=>{
+    const ts=r.activityStart?Date.parse(r.activityStart):r.createdAt;
+    return ts>=cutoff;
+  });
+}
+function computeElevGain(elevs){
+  if(!elevs || elevs.length<2) return 0;
+  let gain=0;
+  for(let i=1;i<elevs.length;i++){
+    const a=elevs[i-1], b=elevs[i];
+    if(!isFinite(a)||!isFinite(b)) continue;
+    const d=b-a;
+    if(d>0) gain+=d;
+  }
+  return gain;
+}
+
+/* ==========================
+   Cadence normalize
+========================== */
+function normalizeCadenceForRunning(cadsRaw){
+  const vals=(cadsRaw||[]).filter(v=>Number.isFinite(v));
+  if(!vals.length) return cadsRaw||[];
+  const med=median(vals);
+  const scale=(med!=null && med<130)?2:1;
+  return scale===1 ? (cadsRaw||[]) : (cadsRaw||[]).map(v=>Number.isFinite(v)?v*2:v);
+}
+function normalizeCadValue(v){
+  if(v==null || !isFinite(v)) return null;
+  return v < 130 ? v*2 : v;
+}
+
+/* ==========================
+   ✅ EK: Pace + Cadence -> Stride (cm)
+========================== */
+function strideCmFromPaceCad(paceMinPerKm, cadSpm){
+  if(!isFinite(paceMinPerKm) || !isFinite(cadSpm) || cadSpm<=0) return null;
+  const speedMs = 1000 / (paceMinPerKm * 60); // m/s
+  const stepPerSec = cadSpm / 60;
+  return (speedMs / stepPerSec) * 100; // cm
+}
+// ✅ Seçili Koşu Cadence↔Stride grafiği eksen sınırları
+const CAD_MIN = 168;
+const CAD_MAX = 194;
+const STR_MIN = 85;
+const STR_MAX = 190;
+
+// ✅ Pace referans eğrisi dataset üretici (03:00 / 04:00 / 05:00 / 06:00)
+function buildPaceLineDataset(paceMin, label, color){
+  const data = [];
+  for(let cad = CAD_MIN; cad <= CAD_MAX; cad++){
+    const stride = strideCmFromPaceCad(paceMin, cad); // cm
+    // Y aralığı dışına taşmasın
+    if(isFinite(stride) && stride >= STR_MIN && stride <= STR_MAX){
+      data.push({ x: cad, y: stride });
+    }
+  }
+  return {
+    type: "line",
+    label,
+    data,
+    borderColor: color,
+    borderWidth: 1.5,
+    borderDash: [6,4],
+    pointRadius: 0,
+    tension: 0,
+    fill: false
+  };
+}
+/* ==========================
+   Leaflet map
+========================== */
+
+let routeLayerGroup = null;
+function paceToMapColorFast(p){
+  if(p <= 3.0) return "#16a34a";
+  if(p <= 3.5) return "#000000";
+  if(p <= 4.0) return "#7c3aed";
+  if(p <= 4.5) return "#ef4444";
+  if(p <= 5.0) return "#f59e0b";
+  return "#10b981";
+}
+
+const map = L.map("map").setView([0,0],2);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+
+function drawRouteByPace(gpxText){
+  if(routeLayerGroup){
+    map.removeLayer(routeLayerGroup);
+    routeLayerGroup = null;
+  }
+
+  const parsed = parseGPX(gpxText);
+  const coords = parsed.coords;
+  const times  = parsed.times;
+
+  if(coords.length>1){
+    try{ map.fitBounds(L.latLngBounds(coords), {padding:[20,20]}); }catch(e){}
+  }
+
+  const group = L.layerGroup();
+  let shownCount = 0;
+
+  for(let i=1;i<coords.length;i++){
+    const dtMin = (times[i]-times[i-1]) / 60000;
+    if(!isFinite(dtMin) || dtMin<=0) continue;
+
+    const dKm = haversine(coords[i-1], coords[i]);
+    if(!isFinite(dKm) || dKm<=0) continue;
+
+    const pace = dtMin / dKm;
+    if(!isFinite(pace)) continue;
+
+    if(pace > PACE_SHOW_MAX_MIN) continue;
+
+    const color = paceToMapColorFast(pace);
+    const seg = L.polyline([coords[i-1], coords[i]], { color, weight: 5, opacity: 0.9, lineCap: "round" });
+    seg.bindTooltip(`Pace: ${formatPace(pace)}`, {sticky:true});
+    seg.addTo(group);
+    shownCount++;
+  }
+
+  group.addTo(map);
+  routeLayerGroup = group;
+
+  if(shownCount===0){
+    setStatus("⚠️ Haritada gösterilecek segment yok (tüm segmentler 5:00'dan yavaş olabilir).", "bad");
+    setTimeout(()=>setStatus("", ""), 3000);
+  }
+}
+
+/* ==========================
+   GPX Parse (HR + Elev + Cadence)
+========================== */
+function parseGPX(gpxText){
+  const xml=new DOMParser().parseFromString(gpxText,"text/xml");
+  const pts=xml.querySelectorAll("trk trkseg trkpt");
+  if(pts.length===0) throw new Error("GPX içinde trackpoint bulunamadı.");
+
+  const coords=[], times=[], hrs=[], elevs=[], cadsRaw=[], distKm=[], pacePoint=[];
+  let totalKm=0;
+
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    const lat=parseFloat(p.getAttribute("lat"));
+    const lon=parseFloat(p.getAttribute("lon"));
+    const tNode=p.querySelector("time");
+    if(isNaN(lat)||isNaN(lon)||!tNode) continue;
+    const t=new Date(tNode.textContent);
+
+    let hr=null;
+    const hrNode=p.querySelector("*|hr") || p.querySelector("hr");
+    if(hrNode){ const v=parseInt(hrNode.textContent,10); if(!isNaN(v)) hr=v; }
+
+    let ele=null;
+    const eleNode=p.querySelector("ele");
+    if(eleNode){ const v=parseFloat(eleNode.textContent); if(!isNaN(v)) ele=v; }
+
+    let cad=null;
+    const cadNode=p.querySelector("*|cad") || p.querySelector("cad");
+    if(cadNode){ const v=parseFloat(cadNode.textContent); if(!isNaN(v)) cad=v; }
+
+    coords.push([lat,lon]); times.push(t); hrs.push(hr); elevs.push(ele); cadsRaw.push(cad);
+
+    if(coords.length===1){
+      distKm.push(0);
+      pacePoint.push(null);
+    } else {
+      const prev=coords[coords.length-2], curr=coords[coords.length-1];
+      const d=haversine(prev,curr);
+      const dtMin=(t-times[times.length-2])/60000;
+      totalKm+=d;
+      distKm.push(totalKm);
+      pacePoint.push(d>0 && dtMin>0 ? dtMin/d : null);
+    }
+  }
+
+  if(coords.length<2) throw new Error("GPX içinde yeterli nokta yok.");
+
+  const totalTimeSec=(times.at(-1)-times[0])/1000;
+  const activityStart=times[0].toISOString();
+  const activityEnd=times.at(-1).toISOString();
+
+  const hrVals=hrs.filter(h=>Number.isFinite(h));
+  const avgHR=hrVals.length?Math.round(avg(hrVals)):null;
+  const maxHR=hrVals.length?Math.max(...hrVals):null;
+
+  const cads = normalizeCadenceForRunning(cadsRaw).map(normalizeCadValue);
+  const cadVals=cads.filter(c=>Number.isFinite(c));
+  const avgCad=cadVals.length?Math.round(avg(cadVals)):null;
+  const maxCad=cadVals.length?Math.max(...cadVals):null;
+
+  const elevGainM=computeElevGain(elevs);
+
+  return { coords,times,hrs,elevs,cads,distKm,pacePoint,totalKm,totalTimeSec,activityStart,activityEnd,avgHR,maxHR,avgCad,maxCad,elevGainM };
+}
+
+/* ==========================
+   Interval type
+========================== */
+function intervalType(m){
+  if(m>=25 && m<50) return "25-50 m";
+  if(m>=50 && m<100) return "50-100 m";
+  if(m>=100 && m<200) return "100–200 m";
+  if(m>=200 && m<300) return "200–300 m";
+  if(m>=300 && m<400) return "300–400 m";
+  if(m>=400 && m<500) return "400–500 m";
+  if(m>=500 && m<600) return "500–600 m";
+  if(m>=600 && m<700) return "600–700 m";
+  if(m>=700 && m<800) return "700–800 m";
+  if(m>=800 && m<900) return "800–900 m";
+  if(m>=900 && m<1000) return "900–1000 m";
+  if(m>=1000 && m<1200) return "1000–1200 m";
+  if(m>=1200 && m<1400) return "1200–1400 m";
+  if(m>=1400 && m<1600) return "1400–1600 m";
+  if(m>=1600 && m<1800) return "1600–1800 m";
+  if(m>=1800 && m<2000) return "1800–2000 m";
+  if(m>=2000 && m<2400) return "2000–2400 m";
+  if(m>=2400 ) return ">=2400 m";
+  return "--";
+}
+
+/* ==========================
+   ✅ GPX fast segments detector (pace < 04:00)
+========================== */
+function detectFastPaceSegmentsFromParsed(parsed){
+  const { coords, times, hrs, cads } = parsed;
+  const out = [];
+
+  let inBlock=false;
+  let startIdx=0, endIdx=0;
+
+  let sumSec=0, sumKm=0;
+  let bestPace=Infinity;
+
+  let hrWSum=0, hrTSum=0;
+  let cadWSum=0, cadTSum=0;
+
+  const closeBlock = () => {
+    if(!inBlock) return;
+
+    if(sumSec >= FAST_MIN_CONT_SEC && sumKm > 0){
+      const avgPace = (sumSec/60) / sumKm;
+      const distM = sumKm * 1000;
+
+      const hrAvg = (hrTSum>0) ? Math.round(hrWSum/hrTSum) : null;
+      const cadAvg = (cadTSum>0) ? Math.round(cadWSum/cadTSum) : null;
+
+      out.push({
+        start: times[startIdx].toISOString(),
+        end:   times[endIdx].toISOString(),
+        time:  sumSec,
+        dist:  distM,
+        pace:  avgPace,
+        paceBest: isFinite(bestPace) ? bestPace : null,
+        hrAvg,
+        cadAvg: normalizeCadValue(cadAvg),
+        type: intervalType(distM)
+      });
+    }
+
+    inBlock=false;
+    sumSec=0; sumKm=0; bestPace=Infinity;
+    hrWSum=0; hrTSum=0;
+    cadWSum=0; cadTSum=0;
+  };
+
+  for(let i=1;i<coords.length;i++){
+    const dtSec = (times[i]-times[i-1]) / 1000;
+    if(!isFinite(dtSec) || dtSec<=0){ closeBlock(); continue; }
+    if(dtSec > FAST_MAX_GAP_SEC){ closeBlock(); continue; }
+
+    const dKm = haversine(coords[i-1], coords[i]);
+    if(!isFinite(dKm) || dKm<=0){ closeBlock(); continue; }
+
+    const paceMin = (dtSec/60) / dKm;
+    if(!isFinite(paceMin)){ closeBlock(); continue; }
+
+    const isFast = paceMin < FAST_PACE_THRESHOLD;
+
+    if(isFast && !inBlock){
+      inBlock=true;
+      startIdx=i-1;
+      endIdx=i;
+    }
+
+    if(inBlock && isFast){
+      endIdx=i;
+      sumSec += dtSec;
+      sumKm  += dKm;
+      bestPace = Math.min(bestPace, paceMin);
+
+      const hr = hrs[i];
+      if(Number.isFinite(hr)){ hrWSum += hr*dtSec; hrTSum += dtSec; }
+
+      const cad = cads[i];
+      if(Number.isFinite(cad)){ cadWSum += cad*dtSec; cadTSum += dtSec; }
+    }
+
+    if(inBlock && !isFast){
+      closeBlock();
+    }
+  }
+
+  closeBlock();
+  return out.map((x,idx)=>({ id: idx+1, ...x }));
+}
+/* ==========================
+   ✅ EK: GPX pace ≤ threshold blokları (genel)
+   - pace: dakika/km
+   - kesintisiz blok: dt > maxGapSec ise kırılır
+========================== */
+function detectPaceBlocksFromParsed(parsed, paceThresholdMin, minContSec, maxGapSec){
+  const { coords, times, hrs, cads } = parsed;
+  const out = [];
+
+  let inBlock = false;
+  let startIdx = 0, endIdx = 0;
+
+  let sumSec = 0, sumKm = 0;
+  let bestPace = Infinity; // en hızlı (min pace)
+  let hrWSum = 0, hrTSum = 0;
+  let cadWSum = 0, cadTSum = 0;
+
+  const closeBlock = () => {
+    if(!inBlock) return;
+
+    if(sumSec >= minContSec && sumKm > 0){
+      const avgPace = (sumSec/60) / sumKm;
+      const distM = sumKm * 1000;
+
+      const hrAvg = (hrTSum>0) ? Math.round(hrWSum/hrTSum) : null;
+      const cadAvg = (cadTSum>0) ? Math.round(cadWSum/cadTSum) : null;
+
+      out.push({
+        start: times[startIdx].toISOString(),
+        end:   times[endIdx].toISOString(),
+        time:  sumSec,
+        dist:  distM,
+        pace:  avgPace,
+        paceMax: isFinite(bestPace) ? bestPace : null, // interval grafiğindeki "Max Pace(en hızlı)" mantığı
+        hrAvg,
+        cadAvg: normalizeCadValue(cadAvg),
+        type: intervalType(distM)
+      });
+    }
+
+    inBlock = false;
+    sumSec = 0; sumKm = 0; bestPace = Infinity;
+    hrWSum = 0; hrTSum = 0;
+    cadWSum = 0; cadTSum = 0;
+  };
+
+  for(let i=1;i<coords.length;i++){
+    const dtSec = (times[i]-times[i-1]) / 1000;
+    if(!isFinite(dtSec) || dtSec<=0){ closeBlock(); continue; }
+    if(dtSec > maxGapSec){ closeBlock(); continue; }
+
+    const dKm = haversine(coords[i-1], coords[i]);
+    if(!isFinite(dKm) || dKm<=0){ closeBlock(); continue; }
+
+    const paceMin = (dtSec/60) / dKm;
+    if(!isFinite(paceMin)){ closeBlock(); continue; }
+
+    const isOk = paceMin <= paceThresholdMin;
+
+    if(isOk && !inBlock){
+      inBlock = true;
+      startIdx = i-1;
+      endIdx = i;
+    }
+
+    if(inBlock && isOk){
+      endIdx = i;
+      sumSec += dtSec;
+      sumKm  += dKm;
+      bestPace = Math.min(bestPace, paceMin);
+
+      const hr = hrs[i];
+      if(Number.isFinite(hr)){ hrWSum += hr*dtSec; hrTSum += dtSec; }
+
+      const cad = cads[i];
+      if(Number.isFinite(cad)){ cadWSum += cad*dtSec; cadTSum += dtSec; }
+    }
+
+    if(inBlock && !isOk){
+      closeBlock();
+    }
+  }
+
+  closeBlock();
+  return out.map((x,idx)=>({ id: idx+1, ...x }));
+}
+
+/* ==========================
+   ✅ EK: Seçili koşu için 05:30 altı pace blok grafiği
+========================== */
+function renderPace530ComboChart(run){
+  try{
+    if(pace530ComboChart){ pace530ComboChart.destroy(); pace530ComboChart=null; }
+    if(!pace530Canvas) return;
+
+    if(!run?.gpxText){
+      if(pace530SummaryEl) pace530SummaryEl.innerHTML = "GPX verisi yok.";
+      return;
+    }
+
+    const parsed = parseGPX(run.gpxText);
+
+    const blocks = detectPaceBlocksFromParsed(
+      parsed,
+      PACE530_THRESHOLD,
+      PACE530_MIN_CONT_SEC,
+      PACE530_MAX_GAP_SEC
+    );
+
+    if(!blocks.length){
+      if(pace530SummaryEl){
+        pace530SummaryEl.innerHTML =
+          `Pace ≤ <b>${formatPace(PACE530_THRESHOLD)}</b> olan ve ≥ <b>${PACE530_MIN_CONT_SEC} sn</b> süren blok bulunamadı.`;
+      }
+      return;
+    }
+
+    const labels = blocks.map(b => `#${b.id} • ${Math.round(b.dist)}m • ${b.type}`);
+    const durData = blocks.map(b => b.time);
+    const paceAvgData = blocks.map(b => b.pace);
+    const paceBestData = blocks.map(b => b.paceMax); // en hızlı
+    const hrAvgData = blocks.map(b => b.hrAvg);
+    const cadAvgData = blocks.map(b => normalizeCadValue(b.cadAvg));
+
+    // özet
+    const totSec = blocks.reduce((a,x)=>a+(x.time||0),0);
+    const totM   = blocks.reduce((a,x)=>a+(x.dist||0),0);
+    const best   = Math.min(...blocks.map(x=>x.paceMax).filter(v=>v!=null && isFinite(v)));
+    const avgAll = (totM>0) ? ((totSec/60)/(totM/1000)) : null;
+
+    if(pace530SummaryEl){
+      pace530SummaryEl.innerHTML = `
+        ✅ <b>${blocks.length}</b> blok bulundu.
+        &nbsp;|&nbsp; <b>Toplam:</b> ${(totM/1000).toFixed(2)} km, ${formatDurationShort(totSec)}
+        &nbsp;|&nbsp; <b>Ort:</b> ${formatPace(avgAll)}/km
+        &nbsp;|&nbsp; <b>En hızlı:</b> ${formatPace(best)}/km
+        <br><small class="muted">Kural: pace ≤ 05:30, min ${PACE530_MIN_CONT_SEC} sn, gap>${PACE530_MAX_GAP_SEC} sn blok kırar.</small>
+      `;
+    }
+
+    pace530ComboChart = new Chart(pace530Canvas.getContext("2d"),{
+       plugins: [targetBandPlugin],
+      data:{
+        labels,
+        datasets:[
+          { type:"bar", label:"Süre (sn)", data:durData, yAxisID:"yTime",
+            backgroundColor:"rgba(14,165,233,0.18)", borderColor:"#0ea5e9", borderWidth:1 },
+
+          { type:"line", label:"Avg Pace", data:paceAvgData, yAxisID:"yPace",
+            borderColor:"#000000", pointRadius:4, pointHoverRadius:5, tension:0.25 },
+
+          { type:"line", label:"Max Pace (en hızlı)", data:paceBestData, yAxisID:"yPace",
+            borderColor:"#7c3aed", borderDash:[7,4], pointRadius:4, tension:0.25, spanGaps:true },
+
+          { type:"line", label:"Avg HR", data:hrAvgData, yAxisID:"yHR",
+            borderColor:"#e11d48", pointRadius:3, tension:0.25, spanGaps:true },
+
+          { type:"line", label:"Avg Cadence", data:cadAvgData, yAxisID:"yCad",
+            borderColor:"#10b981", pointRadius:3, tension:0.25, spanGaps:true }
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        interaction:{ mode:"nearest", intersect:false },
+        scales:{
+          yTime:{ position:"left", title:{display:true,text:"Süre (sn)"} },
+          yCad:{ position:"left", offset:true, grid:{ drawOnChartArea:false }, title:{display:true,text:"Cadence (spm)"} },
+
+          yPace:{ position:"right", reverse:true, grid:{ drawOnChartArea:false },
+            title:{display:true,text:"Pace (MM:SS)"},
+            ticks: paceTicks(14) },
+
+          yHR:{ position:"right", offset:true, grid:{ drawOnChartArea:false }, title:{display:true,text:"HR (bpm)"} },
+
+          x:{ ticks:{ maxRotation:45, minRotation:45, autoSkip:true } }
+        },
+        plugins:{
+  legend:{ display:false },
+
+  targetBandPlugin:{
+    enabled: true,
+    ranges:[
+      {
+        min: parsePaceMMSS("03:30"),
+        max: parsePaceMMSS("04:00"),
+        color:"rgba(59,130,246,0.15)"   // 🔵 hızlı zone
+      },
+      {
+        min: parsePaceMMSS("04:00"),
+        max: parsePaceMMSS("04:30"),
+        color:"rgba(34,197,94,0.15)"    // 🟩 race pace
+      }]
+  }
+}
+      }
+    });
+
+  }catch(e){
+    console.warn("renderPace530ComboChart error:", e);
+  }
+}
+/* ==========================
+   Interval detection (algılanan)
+========================== */
+function finalizeInterval(c, arr){
+  const dur = (c.e - c.s) / 1000;
+  const paces = c.p.filter(v => v!=null && isFinite(v));
+  const paceAvg = paces.length ? avg(paces) : null;
+  if(paceAvg && dur >= MIN_INTERVAL_DURATION && paceAvg < MAX_INTERVAL_PACE){
+    arr.push(c);
+  }
+}
+function detectDynamicIntervals(pacePoint, times, distKm, hrs, cads){
+  const base = median(pacePoint);
+  if(!base) return [];
+  const startThr = base * 0.88;
+  const endThr   = base * 0.95;
+
+  let results = [];
+  let cur = null;
+
+  for(let i=0;i<pacePoint.length;i++){
+    const p = pacePoint[i];
+    if(p==null || !isFinite(p)) continue;
+
+    if(!cur && p < startThr){
+      cur = { s: times[i], e: times[i], ds: distKm[i], de: distKm[i], p: [], hr: [], cad: [] };
+    }
+
+    if(cur){
+      cur.e = times[i];
+      cur.de = distKm[i];
+      cur.p.push(p);
+
+      const h = hrs[i];
+      if(Number.isFinite(h)) cur.hr.push(h);
+
+      const c = cads ? cads[i] : null;
+      if(Number.isFinite(c)) cur.cad.push(c);
+
+      if(p > endThr){
+        finalizeInterval(cur, results);
+        cur = null;
+      }
+    }
+  }
+  if(cur) finalizeInterval(cur, results);
+
+  return results.map((x,idx)=>{
+    const distM = (x.de - x.ds) * 1000;
+    const timeS = (x.e - x.s) / 1000;
+
+    const paces = x.p.filter(v => v!=null && isFinite(v));
+    const paceAvg = paces.length ? avg(paces) : null;
+    const paceMax = paces.length ? Math.min(...paces) : null;
+
+    const hrVals = x.hr.filter(v => v!=null && isFinite(v));
+    const hrAvg = hrVals.length ? Math.round(avg(hrVals)) : null;
+
+    const cadVals = x.cad.filter(v => v!=null && isFinite(v));
+    let cadAvg = cadVals.length ? Math.round(avg(cadVals)) : null;
+
+    cadAvg = normalizeCadValue(cadAvg);
+
+    return {
+      id: idx+1,
+      start: x.s.toISOString(),
+      end: x.e.toISOString(),
+      time: timeS,
+      dist: distM,
+      pace: paceAvg,
+      paceMax,
+      hrAvg,
+      cadAvg,
+      type: intervalType(distM)
+    };
+  });
+}
+
+/* ==========================
+   HR Zones + Z4Z5
+========================== */
+let hrZoneChart=null;
+function computeHRZones(times, hrs, hrMax){
+  hrMax = Number.isFinite(hrMax) ? hrMax : 175;
+  const zones=[
+    {name:"Z1 (60-70%)",min:0.50,max:0.60,sec:0},
+    {name:"Z2 (70-80%)",min:0.60,max:0.70,sec:0},
+    {name:"Z3 (80-90%)",min:0.70,max:0.80,sec:0},
+    {name:"Z4 (90-95%)",min:0.80,max:0.90,sec:0},
+    {name:"Z5 (95-100%)",min:0.90,max:1.10,sec:0},
+  ];
+  for(let i=1;i<times.length;i++){
+    const hr=hrs[i]; if(!Number.isFinite(hr)) continue;
+    const dt=(times[i]-times[i-1])/1000; if(dt<=0 || dt>60) continue;
+    const pct=hr/hrMax;
+    const z=zones.find(z=>pct>=z.min && pct<z.max);
+    if(z) z.sec+=dt;
+  }
+  const totalSec=zones.reduce((a,z)=>a+z.sec,0);
+  const z4z5Sec=zones[3].sec+zones[4].sec;
+  return { zones, totalSec, z4z5Sec };
+}
+function renderHRZonesFromRun(run){
+  if(!run.gpxText){
+    hrSummaryEl.innerHTML = "HR zone için GPX verisi yok.";
+    if(hrZoneChart){ hrZoneChart.destroy(); hrZoneChart=null; }
+    return;
+  }
+  const parsed = parseGPX(run.gpxText);
+  if(!parsed.hrs.some(h=>Number.isFinite(h))){
+    hrSummaryEl.innerHTML = "Bu GPX dosyasında HR (nabız) yok.";
+    if(hrZoneChart){ hrZoneChart.destroy(); hrZoneChart=null; }
+    return;
+  }
+
+  const hrMax=parseInt(hrMaxInput.value||"190",10);
+  const { zones, totalSec } = computeHRZones(parsed.times, parsed.hrs, hrMax);
+
+  hrSummaryEl.innerHTML = `
+    <b>HRmax:</b> ${hrMax} bpm &nbsp; | &nbsp;
+    <b>Toplam HR Süresi:</b> ${(totalSec/60).toFixed(1)} dk
+  `;
+
+  const labels = zones.map(z=>z.name);
+  const mins = zones.map(z=>+(z.sec/60).toFixed(1));
+
+  if(hrZoneChart) hrZoneChart.destroy();
+  hrZoneChart = new Chart(document.getElementById("hrZoneChart").getContext("2d"),{
+    type:"bar",
+    data:{ labels, datasets:[{ label:"Süre (dk)", data:mins, backgroundColor:["#bbf7d0","#bae6fd","#fed7aa","#fecaca","#fca5a5"] }]},
+    options:{ responsive:true, scales:{ y:{ title:{display:true,text:"Dakika"} } } }
+  });
+}
+
+/* ==========================
+   Target band plugin
+========================== */
+const targetBandPlugin = {
+  id: "targetBandPlugin",
+  beforeDatasetsDraw(chart, args, opts) {
+
+    const yScale = chart.scales.yPace || chart.scales.y;
+    if(!yScale || !opts || !opts.enabled) return;
+
+    const { ctx, chartArea } = chart;
+
+    // ✅ MULTI RANGE DESTEK
+    const ranges = opts.ranges || (
+      (opts.min != null && opts.max != null)
+        ? [{min:opts.min, max:opts.max, color:opts.color}]
+        : []
+    );
+
+    ctx.save();
+
+    for(const r of ranges){
+      if(r.min==null || r.max==null) continue;
+
+      const y1 = yScale.getPixelForValue(r.min);
+      const y2 = yScale.getPixelForValue(r.max);
+
+      const top = Math.min(y1,y2);
+      const bottom = Math.max(y1,y2);
+
+      ctx.fillStyle = r.color || "rgba(34,197,94,0.12)";
+      ctx.fillRect(chartArea.left, top, chartArea.right-chartArea.left, bottom-top);
+    }
+
+    ctx.restore();
+  }
+};
+
+
+/* ==========================
+   Charts globals
+========================== */
+let selectedBestSegMaps = new Map();   // label -> Leaflet map
+let selectedBestSegColors = {
+  "100m":  "#2563eb",
+  "200m":  "#16a34a",
+  "300m":  "#7c3aed",
+  "400m":  "#ef4444",
+  "800m":  "#f59e0b",
+  "1000m": "#0ea5e9",
+  "1600m": "#14b8a6",
+  "2000m": "#e11d48",
+  "2400m": "#334155",
+  "3000m": "#E76F51",
+  "5000m": "#2A9D8F",
+  "10000m": "#7c3aed"
+};
+
+let fastSegRunTrendChart = null;
+let intervalComboChart=null;
+let trendComboChart=null, trendWeeklyChart=null, trendScatterChart=null;
+let bestEffortsPaceChart=null, selectedBestEffortsPaceChart=null;
+let bestEffortsScatterChart=null;
+let currentRunId=null;
+
+let miniAvgPaceChart=null, miniIntervalCountChart=null, miniIntervalKmChart=null;
+let miniIntervalTimeChart=null, miniIntervalAvgPaceChart=null, miniIntervalDensityChart=null;
+let miniBestIntervalPaceChart=null, miniLongestIntervalChart=null;
+let miniAvgHRChart=null, miniMaxHRChart=null, miniAvgCadChart=null, miniMaxCadChart=null;
+let miniZ45Chart=null;
+
+/* ✅ EK: Cadence ↔ Stride scatter charts */
+let cadStrideSelectedChart = null;
+let cadStrideTrendChart = null;
+
+/* ==========================
+   Best Efforts targets
+========================== */
+const BEST_MAP_TARGETS = [
+  { label:"100m",  km:0.100 },
+  { label:"200m",  km:0.200 },
+  { label:"300m",  km:0.300 },
+  { label:"400m",  km:0.400 },
+  { label:"800m",  km:0.800 },
+  { label:"1000m", km:1.000 },
+  { label:"1600m", km:1.600 },
+  { label:"2000m", km:2.000 },
+  { label:"2400m", km:2.400 },
+  { label:"3000m", km:3.000 },
+  { label:"5000m", km:5.000 },
+  { label:"10000m", km:10.000 }
+];
+const BEST_TARGETS = [
+  {label:"100m",      km:0.100},
+  {label:"200m",      km:0.200},
+  {label:"300m",      km:0.300},
+  {label:"400m",      km:0.400},
+  {label:"800m",      km:0.800},
+  {label:"1K",        km:1.000},
+  {label:"1 mile",    km:1.609344},
+  {label:"2K",        km:2.000},
+  {label:"2.4K",      km:2.400},
+  {label:"3K",        km:3.000},
+  {label:"2 mile",    km:3.218688},
+  {label:"4K",        km:4.000},
+  {label:"5K",        km:5.000},
+  {label:"6K",        km:6.000},
+  {label:"7K",        km:7.000},
+  {label:"8K",        km:8.000},
+  {label:"9K",        km:9.000},
+  {label:"10K",       km:10.000},
+  {label:"12K",       km:12.000},
+  {label:"15K",       km:15.000},
+  {label:"10 mile",   km:16.09344},
+  {label:"20K",       km:20.000},
+  {label:"Half-Marathon", km:21.0975},
+  {label:"30K",       km:30.000},
+  {label:"Marathon",  km:42.195},
+  {label:"50K",       km:50.000},
+];
+function bestSegDomId(label){
+  return "bestSegMap_" + String(label).replace(/[^a-zA-Z0-9]/g, "_");
+}
+function destroySelectedBestSegMaps(){
+  try{
+    for(const m of selectedBestSegMaps.values()){
+      try{ m.remove(); }catch(e){}
+    }
+    selectedBestSegMaps.clear();
+  }catch(e){}
+}
+function renderSelectedRunBestSegmentMaps(run){
+  try{
+    destroySelectedBestSegMaps();
+
+    if(!selectedBestSegMapsWrapEl) return;
+
+    if(!run?.gpxText){
+      selectedBestSegMapsWrapEl.innerHTML = "";
+      if(selectedBestSegSummaryEl){
+        selectedBestSegSummaryEl.innerHTML = "GPX verisi yok.";
+      }
+      return;
+    }
+
+    let parsed;
+    try{
+      parsed = parseGPX(run.gpxText);
+    }catch(e){
+      selectedBestSegMapsWrapEl.innerHTML = "";
+      if(selectedBestSegSummaryEl){
+        selectedBestSegSummaryEl.innerHTML = "Seçili koşu parse edilemedi.";
+      }
+      return;
+    }
+
+    const results = BEST_MAP_TARGETS.map(t => {
+      const seg = bestSegmentForDistanceWithPath(parsed.distKm, parsed.times, parsed.coords, t.km);
+      return { ...t, seg };
+    });
+
+    const foundCount = results.filter(x => x.seg && x.seg.pathCoords && x.seg.pathCoords.length >= 2).length;
+
+    if(selectedBestSegSummaryEl){
+      selectedBestSegSummaryEl.innerHTML =
+        `Koşu: <b>${run.name || "-"}</b> • ` +
+        `Toplam mesafe: <b>${(run.totalDistKm || 0).toFixed(2)} km</b> • ` +
+        `Gösterilen best effort haritası: <b>${foundCount}/${BEST_MAP_TARGETS.length}</b>`;
+    }
+
+    selectedBestSegMapsWrapEl.innerHTML = results.map(r => {
+      const id = bestSegDomId(r.label);
+
+      if(!r.seg || !r.seg.pathCoords || r.seg.pathCoords.length < 2){
+        return `
+          <div class="bestSegMapCard">
+            <h4>${r.label}</h4>
+            <div class="bestSegEmpty">
+              Bu mesafe için yeterli veri yok.
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="bestSegMapCard">
+          <h4>${r.label}</h4>
+          <div id="${id}" class="bestSegMapCanvas"></div>
+          <div class="bestSegMapMeta">
+            <div><b>Süre:</b> ${formatDurationShort(r.seg.durSec)}</div>
+            <div><b>Pace:</b> ${formatPace(r.seg.pace)}/km</div>
+            <div><b>Başlangıç:</b> ${fmtTimeISO(new Date(r.seg.startTime))}</div>
+            <div><b>Bitiş:</b> ${fmtTimeISO(new Date(r.seg.endTime))}</div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    requestAnimationFrame(() => {
+      for(const r of results){
+        if(!r.seg || !r.seg.pathCoords || r.seg.pathCoords.length < 2) continue;
+
+        const id = bestSegDomId(r.label);
+        const el = document.getElementById(id);
+        if(!el) continue;
+
+        const m = L.map(id, {
+          attributionControl: false,
+          zoomControl: true
+        });
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(m);
+
+        const color = selectedBestSegColors[r.label] || "#2563eb";
+        const group = L.layerGroup().addTo(m);
+
+        L.polyline(r.seg.pathCoords, {
+          color,
+          weight: 6,
+          opacity: 0.90,
+          lineCap: "round"
+        })
+        .bindPopup(`
+          <div style="min-width:220px;">
+            <div><b>Koşu:</b> ${run.name || "-"}</div>
+            <div><b>Mesafe:</b> ${r.label}</div>
+            <div><b>Süre:</b> ${formatDurationShort(r.seg.durSec)}</div>
+            <div><b>Pace:</b> ${formatPace(r.seg.pace)}/km</div>
+            <div><b>Başlangıç:</b> ${fmtDateTimeTR(r.seg.startTime)}</div>
+            <div><b>Bitiş:</b> ${fmtDateTimeTR(r.seg.endTime)}</div>
+          </div>
+        `)
+        .addTo(group);
+
+        if(r.seg.startCoord){
+          L.circleMarker(r.seg.startCoord, {
+            radius: 5,
+            color,
+            weight: 2,
+            fillColor: "#ffffff",
+            fillOpacity: 1
+          })
+          .bindTooltip(`${r.label} başlangıç`, {sticky:true})
+          .addTo(group);
+        }
+
+        if(r.seg.endCoord){
+          L.circleMarker(r.seg.endCoord, {
+            radius: 5,
+            color,
+            weight: 2,
+            fillColor: color,
+            fillOpacity: 1
+          })
+          .bindTooltip(`${r.label} bitiş`, {sticky:true})
+          .addTo(group);
+        }
+
+        try{
+          m.fitBounds(L.latLngBounds(r.seg.pathCoords), { padding:[18,18] });
+        }catch(e){
+          m.setView(r.seg.pathCoords[0], 16);
+        }
+
+        selectedBestSegMaps.set(r.label, m);
+
+        setTimeout(() => {
+          try{ m.invalidateSize(); }catch(e){}
+        }, 60);
+      }
+    });
+
+  }catch(e){
+    console.warn("renderSelectedRunBestSegmentMaps error:", e);
+  }
+}
+function bestTimeForDistance(distKm, times, targetKm){
+  if(!distKm || distKm.length<2) return null;
+  const total = distKm[distKm.length-1];
+  if(!isFinite(total) || total < targetKm) return null;
+  let best = Infinity, j = 0;
+
+  for(let i=0;i<distKm.length;i++){
+    if(!isFinite(distKm[i])) continue;
+    if(j < i) j = i;
+    while(j < distKm.length && (distKm[j]-distKm[i]) < targetKm) j++;
+    if(j >= distKm.length) break;
+
+    const d0 = distKm[j-1], d1 = distKm[j];
+    const t0 = times[j-1].getTime(), t1 = times[j].getTime();
+    if(!isFinite(d0) || !isFinite(d1) || d1<=d0) continue;
+
+    const need = distKm[i] + targetKm;
+    const frac = (need - d0) / (d1 - d0);
+    const tCross = t0 + frac*(t1 - t0);
+    const durSec = (tCross - times[i].getTime()) / 1000;
+    if(durSec > 0 && durSec < best) best = durSec;
+  }
+  return isFinite(best) ? best : null;
+}
+function colorFromString(str){
+  let hash = 0;
+  const s = String(str || "");
+  for(let i=0;i<s.length;i++){
+    hash = s.charCodeAt(i) + ((hash << 5) - hash);
+    hash |= 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 75%, 45%)`;
+}
+function interpolateCoordAtKm(distKm, coords, targetKm){
+  if(!distKm?.length || !coords?.length) return null;
+  if(targetKm <= 0) return coords[0];
+  const total = distKm[distKm.length - 1];
+  if(targetKm >= total) return coords[coords.length - 1];
+
+  for(let i=1;i<distKm.length;i++){
+    const d0 = distKm[i-1];
+    const d1 = distKm[i];
+    if(targetKm >= d0 && targetKm <= d1){
+      const c0 = coords[i-1];
+      const c1 = coords[i];
+      const span = d1 - d0;
+      const frac = span > 0 ? (targetKm - d0) / span : 0;
+
+      return [
+        c0[0] + (c1[0] - c0[0]) * frac,
+        c0[1] + (c1[1] - c0[1]) * frac
+      ];
+    }
+  }
+
+  return coords[coords.length - 1];
+}
+function buildCoordsBetweenKm(distKm, coords, startKm, endKm){
+  if(!distKm?.length || !coords?.length || endKm <= startKm) return [];
+
+  const out = [];
+  const startCoord = interpolateCoordAtKm(distKm, coords, startKm);
+  const endCoord   = interpolateCoordAtKm(distKm, coords, endKm);
+
+  if(startCoord) out.push(startCoord);
+
+  for(let i=1;i<distKm.length-1;i++){
+    const d = distKm[i];
+    if(d > startKm && d < endKm){
+      out.push(coords[i]);
+    }
+  }
+
+  if(endCoord) out.push(endCoord);
+
+  return out;
+}
+function bestSegmentForDistanceWithPath(distKm, times, coords, targetKm){
+  if(!distKm || distKm.length < 2 || !times || times.length < 2 || !coords || coords.length < 2){
+    return null;
+  }
+
+  const total = distKm[distKm.length - 1];
+  if(!isFinite(total) || total < targetKm) return null;
+
+  let best = null;
+  let j = 0;
+
+  for(let i=0;i<distKm.length;i++){
+    if(!isFinite(distKm[i])) continue;
+    if(j < i) j = i;
+
+    while(j < distKm.length && (distKm[j] - distKm[i]) < targetKm) j++;
+    if(j >= distKm.length) break;
+
+    const d0 = distKm[j-1];
+    const d1 = distKm[j];
+    const t0 = times[j-1].getTime();
+    const t1 = times[j].getTime();
+
+    if(!isFinite(d0) || !isFinite(d1) || d1 <= d0) continue;
+
+    const need = distKm[i] + targetKm;
+    const frac = (need - d0) / (d1 - d0);
+    const tCross = t0 + frac * (t1 - t0);
+
+    const durSec = (tCross - times[i].getTime()) / 1000;
+    if(!(durSec > 0) || !isFinite(durSec)) continue;
+
+    if(best == null || durSec < best.durSec){
+      const startKm = distKm[i];
+      const endKm = startKm + targetKm;
+
+      const startCoord = interpolateCoordAtKm(distKm, coords, startKm);
+      const endCoord   = interpolateCoordAtKm(distKm, coords, endKm);
+      const pathCoords = buildCoordsBetweenKm(distKm, coords, startKm, endKm);
+
+      best = {
+        startIndex: i,
+        endIndex: j,
+        startKm,
+        endKm,
+        durSec,
+        pace: (durSec / 60) / targetKm,
+        startTime: times[i].toISOString(),
+        endTime: new Date(tCross).toISOString(),
+        startCoord,
+        endCoord,
+        pathCoords
+      };
+    }
+  }
+
+  return best;
+}
+
+/* Best Efforts chart */
+function renderBestEffortsPaceChart(bestMap){
+
+  if(typeof Chart === "undefined") return;
+  const canvas = document.getElementById("bestEffortsPaceChart");
+  if(!canvas) return;
+
+  const labels = BEST_TARGETS.map(t => t.label);
+  const paceSeries = [];
+  const meta = [];
+
+  for(const t of BEST_TARGETS){
+    const sec = bestMap.get(t.label);
+    if(sec == null || !isFinite(sec) || sec <= 0){
+      paceSeries.push(null);
+      meta.push(null);
+      continue;
+    }
+    const paceMinPerKm = (sec/60) / t.km;
+    paceSeries.push(isFinite(paceMinPerKm) ? paceMinPerKm : null);
+    meta.push({ label: t.label, sec, pace: paceMinPerKm });
+  }
+
+  if(bestEffortsPaceChart){ bestEffortsPaceChart.destroy(); bestEffortsPaceChart=null; }
+  if(!paceSeries.some(v => v!=null && isFinite(v))) return;
+
+  bestEffortsPaceChart = new Chart(canvas.getContext("2d"), {
+
+plugins: [targetBandPlugin],   // ✅ EKLE
+
+    type: "line",
+    data: { labels, datasets: [{
+      label: "Pace (Best Efforts)",
+      data: paceSeries,
+      borderColor: "#38bdf8",
+      backgroundColor: "rgba(56,189,248,0.18)",
+      borderWidth: 3,
+      fill: true,
+      tension: 0.22,
+      pointBackgroundColor: "#fbbf24",
+      pointBorderColor: "#0f172a",
+      pointBorderWidth: 2,
+      pointRadius: (c) => (c.raw == null ? 0 : 5),
+      pointHoverRadius: (c) => (c.raw == null ? 0 : 8),
+      spanGaps: false
+    }]},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "nearest", intersect: false },
+
+scales:{
+    y:{
+      reverse:true,
+      title:{display:true,text:"Pace (MM:SS/km)"},
+      ticks:{
+        callback:(v)=>formatPace(v),
+
+        // ✅ daha fazla değer göster
+        autoSkip:false,
+        maxTicksLimit: 14,   // 10-18 arası deneyebilirsin
+        padding: 6
+      }
+    },
+    x:{ title:{display:true,text:"Mesafe"} }
+  },
+
+      plugins:{
+        legend:{display:false},
+
+ targetBandPlugin:{
+    enabled: true,
+    ranges:[
+      {
+        min: parsePaceMMSS("03:30"),
+        max: parsePaceMMSS("04:00"),
+        color:"rgba(59,130,246,0.15)"   // 🔵 hızlı zone
+      },
+      {
+        min: parsePaceMMSS("04:00"),
+        max: parsePaceMMSS("04:30"),
+        color:"rgba(34,197,94,0.15)"    // 🟩 race pace
+      }
+    ]
+  },
+
+        tooltip:{
+          displayColors:false,
+          callbacks:{
+            title:(items)=>{
+              const i=items?.[0]?.dataIndex ?? -1;
+              return meta[i]?.label ? `Mesafe: ${meta[i].label}` : "";
+            },
+            label:(item)=>{
+              const i=item.dataIndex ?? -1;
+              const m=meta[i];
+              if(!m) return "Veri yok";
+              return [`Pace: ${formatPace(m.pace)}/km`, `Süre: ${formatDurationShort(m.sec)}`];
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+/* details resize */
+document.addEventListener("DOMContentLoaded", () => {
+  const details = document.querySelector("#bestEffortsPanel details");
+  if(!details) return;
+  details.addEventListener("toggle", () => {
+    if(details.open && bestEffortsPaceChart){
+      requestAnimationFrame(() => bestEffortsPaceChart.resize());
+      setTimeout(()=>{ try{bestEffortsPaceChart.resize();}catch(e){} }, 50);
+    }
+  });
+});
+
+function buildSelectedRunBestEffortsHtml(run){
+  try{
+    if(!run || !run.gpxText) return "";
+    const parsed = parseGPX(run.gpxText);
+    if(!parsed?.distKm?.length || !parsed?.times?.length) return "";
+
+    const rows = BEST_TARGETS.map(t => {
+      const sec = bestTimeForDistance(parsed.distKm, parsed.times, t.km);
+      if(sec == null || !isFinite(sec) || sec <= 0){
+        return `
+          <div style="display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #e5e7eb; padding:4px 0;">
+            <span><b>${t.label}</b></span>
+            <span>-</span>
+          </div>
+        `;
+      }
+      const pace = (sec/60) / t.km;
+      return `
+        <div style="display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #e5e7eb; padding:4px 0;">
+          <span><b>${t.label}</b></span>
+          <span>${formatDurationShort(sec)}  ·  ${formatPace(pace)}/km</span>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div style="margin-top:10px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px;">
+        <div style="font-weight:600; margin-bottom:6px;">🏅 Seçili Koşu Best Efforts</div>
+        <small style="color:#475569; display:block; margin-bottom:8px;">
+          Bu değerler, seçili koşunun kendi GPX verisinden hesaplanır.
+        </small>
+
+        <div style="width:100%; height:420px; margin:10px 0;">
+          <canvas id="selectedBestEffortsPaceChart" style="width:100%; height:100%; display:block; padding:0;"></canvas>
+        </div>
+        <small class="muted" style="display:block; margin-bottom:10px;">
+          Pace (MM:SS/km). Daha hızlı pace üstte gösterilir.
+        </small>
+
+        ${rows}
+      </div>
+    `;
+  }catch(e){
+    console.warn("Selected run best efforts compute error:", e);
+    return "";
+  }
+}
+
+function renderSelectedBestEffortsPaceChart(run){
+  try{
+    if(selectedBestEffortsPaceChart){
+      selectedBestEffortsPaceChart.destroy();
+      selectedBestEffortsPaceChart = null;
+    }
+    if(!run || !run.gpxText) return;
+
+    const canvas = document.getElementById("selectedBestEffortsPaceChart");
+    if(!canvas) return;
+
+    const parsed = parseGPX(run.gpxText);
+    if(!parsed?.distKm?.length || !parsed?.times?.length) return;
+
+    const labels = BEST_TARGETS.map(t => t.label);
+    const paceSeries = [];
+    const meta = [];
+
+    for(const t of BEST_TARGETS){
+      const sec = bestTimeForDistance(parsed.distKm, parsed.times, t.km);
+      if(sec == null || !isFinite(sec) || sec <= 0){
+        paceSeries.push(null);
+        meta.push(null);
+        continue;
+      }
+      const pace = (sec/60) / t.km;
+      paceSeries.push(isFinite(pace) ? pace : null);
+      meta.push({ label: t.label, sec, pace });
+    }
+
+    if(!paceSeries.some(v => v!=null && isFinite(v))) return;
+
+    selectedBestEffortsPaceChart = new Chart(canvas.getContext("2d"),{
+      plugins:[targetBandPlugin],
+      type:"line",
+      data:{
+        labels,
+        datasets:[{
+          label:"Seçili Koşu Best Efforts Pace",
+          data: paceSeries,
+          borderColor:"#38bdf8",
+          backgroundColor:"rgba(56,189,248,0.18)",
+          borderWidth:3,
+          fill:true,
+          tension:0.22,
+          pointBackgroundColor:"#fbbf24",
+          pointBorderColor:"#0f172a",
+          pointBorderWidth:2,
+          pointRadius:(c)=>(c.raw==null?0:4),
+          pointHoverRadius:(c)=>(c.raw==null?0:7),
+          spanGaps:false
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        interaction:{ mode:"nearest", intersect:false },
+
+scales:{
+    y:{
+      reverse:true,
+      title:{display:true,text:"Pace (MM:SS/km)"},
+      ticks:{
+        callback:(v)=>formatPace(v),
+
+        // ✅ daha fazla değer göster
+        autoSkip:false,
+        maxTicksLimit: 14,   // 10-18 arası deneyebilirsin
+        padding: 6
+      }
+    },
+    x:{ title:{display:true,text:"Mesafe"} }
+  },
+
+        plugins:{
+          legend:{display:false},
+
+targetBandPlugin:{
+    enabled: true,
+    ranges:[
+      {
+        min: parsePaceMMSS("03:30"),
+        max: parsePaceMMSS("04:00"),
+        color:"rgba(59,130,246,0.15)"   // 🔵 hızlı zone
+      },
+      {
+        min: parsePaceMMSS("04:00"),
+        max: parsePaceMMSS("04:30"),
+        color:"rgba(34,197,94,0.15)"    // 🟩 race pace
+      }]
+  },
+
+          tooltip:{
+            displayColors:false,
+            callbacks:{
+              title:(items)=>{
+                const i=items?.[0]?.dataIndex ?? -1;
+                return meta[i]?.label ? `Mesafe: ${meta[i].label}` : "";
+              },
+              label:(item)=>{
+                const i=item.dataIndex ?? -1;
+                const m=meta[i];
+                if(!m) return "Veri yok";
+                return [`Pace: ${formatPace(m.pace)}/km`,`Süre: ${formatDurationShort(m.sec)}`];
+              }
+            }
+          }
+        }
+      }
+    });
+  }catch(e){
+    console.warn("renderSelectedBestEffortsPaceChart error:", e);
+  }
+}
+
+/* Best Efforts scatter */
+function renderBestEffortsScatterChart(allRuns){
+  if(typeof Chart === "undefined") return;
+  const canvas = document.getElementById("bestEffortsScatterChart");
+  if(!canvas) return;
+
+  const filtered = filterRunsByRange(allRuns || []);
+  if(!filtered.length){
+    if(bestEffortsScatterChart){
+      bestEffortsScatterChart.destroy();
+      bestEffortsScatterChart = null;
+    }
+    return;
+  }
+
+  const points = [];
+
+  for(const run of filtered){
+    if(!run.gpxText) continue;
+    let parsed;
+    try{ parsed = parseGPX(run.gpxText); }catch{ continue; }
+
+    for(const t of BEST_TARGETS){
+      const sec = bestTimeForDistance(parsed.distKm, parsed.times, t.km);
+      if(sec == null || !isFinite(sec) || sec <= 0) continue;
+      const pace = (sec/60) / t.km;
+      if(!isFinite(pace)) continue;
+
+      points.push({ x:t.km, y:pace, runName:run.name||"Run", label:t.label, sec });
+    }
+  }
+
+  if(bestEffortsScatterChart){ bestEffortsScatterChart.destroy(); bestEffortsScatterChart=null; }
+  if(!points.length) return;
+
+  bestEffortsScatterChart = new Chart(canvas.getContext("2d"),{
+    plugins:[targetBandPlugin],
+    type:"scatter",
+    data:{ datasets:[{ data: points, backgroundColor:"rgba(56,189,248,0.75)", pointRadius:5, pointHoverRadius:8 }]},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{ mode:"nearest", intersect:false },
+
+scales:{
+    y:{
+      reverse:true,
+      title:{display:true,text:"Pace (MM:SS/km)"},
+      ticks:{
+        callback:(v)=>formatPace(v),
+
+        // ✅ daha fazla değer göster
+        autoSkip:false,
+        maxTicksLimit: 14,   // 10-18 arası deneyebilirsin
+        padding: 6
+      }
+    },
+    x:{ title:{display:true,text:"Mesafe"} }
+  },
+
+      plugins:{
+        legend:{display:false},
+
+// ✅ 2 BAND AYNI ANDA
+  targetBandPlugin:{
+    enabled:true,
+    ranges:[
+      {
+        min: parsePaceMMSS("03:30"),
+        max: parsePaceMMSS("04:00"),
+        color:"rgba(59,130,246,0.15)"   // 🔵 hızlı zone
+      },
+      {
+        min: parsePaceMMSS("04:00"),
+        max: parsePaceMMSS("04:30"),
+        color:"rgba(34,197,94,0.15)"    // 🟩 race pace
+      }
+    ]
+  },
+
+        tooltip:{
+          callbacks:{
+            title:(items)=> items?.[0]?.raw ? `${items[0].raw.label} • ${items[0].raw.runName}` : "",
+            label:(item)=>{
+              const p=item.raw;
+              return [`Pace: ${formatPace(p.y)}/km`, `Süre: ${formatDurationShort(p.sec)}`, `Mesafe: ${p.x.toFixed(2)} km`];
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+/* Best efforts totals panel */
+async function updateBestEffortsAndTotals(allRuns){
+  const filtered = filterRunsByRange(allRuns || []);
+  const activities = filtered.length;
+  const distSum = filtered.reduce((a,r)=>a + (r.totalDistKm||0), 0);
+  const timeSum = filtered.reduce((a,r)=>a + (r.totalTimeSec||0), 0);
+  const elevSum = filtered.reduce((a,r)=>a + (r.elevGainM||0), 0);
+
+  statActivitiesEl.textContent = String(activities);
+  statDistanceEl.textContent = `${distSum.toFixed(1)} km`;
+  statTimeEl.textContent = formatTotalTime(timeSum);
+  statElevEl.textContent = `${Math.round(elevSum)} m`;
+
+  const bestMap = new Map(BEST_TARGETS.map(t=>[t.label, null]));
+  for(const r of filtered){
+    if(!r.gpxText) continue;
+    let parsed;
+    try{ parsed=parseGPX(r.gpxText); }catch{ continue; }
+    for(const t of BEST_TARGETS){
+      const sec = bestTimeForDistance(parsed.distKm, parsed.times, t.km);
+      if(sec==null) continue;
+      const prev = bestMap.get(t.label);
+      if(prev==null || sec < prev) bestMap.set(t.label, sec);
+    }
+  }
+
+  bestEffortsListEl.innerHTML="";
+  for(const t of BEST_TARGETS){
+    const sec=bestMap.get(t.label);
+    const val=sec==null?"-":formatDurationShort(sec);
+    const row=document.createElement("div");
+    row.innerHTML=`<span>${t.label}</span><b>${val}</b>`;
+    bestEffortsListEl.appendChild(row);
+  }
+
+  renderBestEffortsPaceChart(bestMap);
+  renderBestEffortsScatterChart(allRuns);
+}
+
+/* ==========================
+   Interval totals + cadence
+========================== */
+function computeIntervalTotals(run){
+  const intervals=run.intervals||[];
+  const totalDistM=intervals.reduce((a,x)=>a+(x.dist||0),0);
+  const totalTimeS=intervals.reduce((a,x)=>a+(x.time||0),0);
+  const count=intervals.length;
+
+  const avgP=(totalDistM>0)?((totalTimeS/60)/(totalDistM/1000)):null;
+  const density=(run.totalDistKm && run.totalDistKm>0)?((totalDistM/1000)/run.totalDistKm)*100:null;
+  const bestIntervalPace=intervals.length?Math.min(...intervals.map(i=>i.pace).filter(v=>v!=null && isFinite(v))):null;
+  const longestIntervalM=intervals.length?Math.max(...intervals.map(i=>i.dist).filter(v=>v!=null && isFinite(v))):null;
+
+  return { intervalCount:count, intervalKm: totalDistM/1000, intervalTimeMin: totalTimeS/60, intervalAvgPace:avgP, intervalDensityPct:density, bestIntervalPace, longestIntervalM };
+}
+function isIntervalWorkout(run){
+  const it = computeIntervalTotals(run);
+  return (it.intervalCount >= 2) && (it.intervalKm >= 0.4) && (it.intervalDensityPct != null && it.intervalDensityPct >= 5);
+}
+function intervalCadenceAvg(run){
+  const intervals = run.intervals || [];
+  const valid = intervals.filter(i => i && isFinite(i.cadAvg) && isFinite(i.time) && i.time>0 && i.type !== "--");
+  if(!valid.length) return normalizeCadValue(run.avgCad);
+  const wSum = valid.reduce((a,i)=>a + i.cadAvg * i.time, 0);
+  const tSum = valid.reduce((a,i)=>a + i.time, 0);
+  return tSum>0 ? normalizeCadValue(wSum/tSum) : null;
+}
+
+/* ==========================
+   Mini charts
+========================== */
+function destroyMiniCharts(){
+  const arr=[
+    miniAvgPaceChart, miniIntervalCountChart, miniIntervalKmChart,
+    miniIntervalTimeChart, miniIntervalAvgPaceChart, miniIntervalDensityChart,
+    miniBestIntervalPaceChart, miniLongestIntervalChart,
+    miniAvgHRChart, miniMaxHRChart, miniAvgCadChart, miniMaxCadChart,
+    miniZ45Chart
+  ];
+  arr.forEach(ch=>{ try{ ch && ch.destroy(); }catch(e){} });
+
+  miniAvgPaceChart=miniIntervalCountChart=miniIntervalKmChart=null;
+  miniIntervalTimeChart=miniIntervalAvgPaceChart=miniIntervalDensityChart=null;
+  miniBestIntervalPaceChart=miniLongestIntervalChart=null;
+  miniAvgHRChart=miniMaxHRChart=miniAvgCadChart=miniMaxCadChart=null;
+  miniZ45Chart=null;
+}
+
+function renderMiniTrendCharts(labels, s){
+  if(typeof Chart === "undefined") return;
+  destroyMiniCharts();
+
+  const line = (data, color) => ({
+    type:"line",
+    data,
+    borderColor: color,
+    backgroundColor:"rgba(14,165,233,0.10)",
+    fill:false,
+    tension:0.22,
+    pointRadius:2,
+    spanGaps:true
+  });
+
+  miniAvgPaceChart = new Chart(miniAvgPaceEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.avgPace, "#000000") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ reverse:true, ticks: paceTicks(14), title:{display:true,text:"MM:SS/km"} } } }
+  });
+
+  miniIntervalCountChart = new Chart(miniIntervalCountEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.intCount, "#0ea5e9") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"adet"} } } }
+  });
+
+  miniIntervalKmChart = new Chart(miniIntervalKmEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.intKm, "#7c3aed") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"km"} } } }
+  });
+
+  miniIntervalTimeChart = new Chart(miniIntervalTimeEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.intTime, "#22c55e") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"dk"} } } }
+  });
+
+  miniIntervalAvgPaceChart = new Chart(miniIntervalAvgPaceEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.intAvgPace, "#000000") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ reverse:true, ticks: paceTicks(14), title:{display:true,text:"MM:SS/km"} } } }
+  });
+
+  miniIntervalDensityChart = new Chart(miniIntervalDensityEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.intDensity, "#06b6d4") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"%"} } } }
+  });
+
+  miniBestIntervalPaceChart = new Chart(miniBestIntervalPaceEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.bestIntPace, "#000000") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ reverse:true, ticks: paceTicks(14), title:{display:true,text:"MM:SS/km"} } } }
+  });
+
+  miniLongestIntervalChart = new Chart(miniLongestIntervalEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.longestIntM, "#a855f7") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"m"} } } }
+  });
+
+  miniAvgHRChart = new Chart(miniAvgHREl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.avgHR, "#ef4444") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"bpm"} } } }
+  });
+
+  miniMaxHRChart = new Chart(miniMaxHREl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.maxHR, "#ef4444") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"bpm"} } } }
+  });
+
+  miniAvgCadChart = new Chart(miniAvgCadEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.avgCad, "#16a34a") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"spm"} } } }
+  });
+
+  miniMaxCadChart = new Chart(miniMaxCadEl.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.maxCad, "#16a34a") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"spm"} } } }
+  });
+
+  miniZ45Chart = new Chart(miniZ45El.getContext("2d"),{
+    type:"line",
+    data:{ labels, datasets:[ line(s.z45, "#f59e0b") ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true,text:"dk"} } } }
+  });
+}
+
+/* ==========================
+   Sorting + resize
+========================== */
+function sortRunsByName(runs){
+  return runs.slice().sort((a,b)=>{
+    const na=(a.name||"").toLocaleLowerCase("tr-TR");
+    const nb=(b.name||"").toLocaleLowerCase("tr-TR");
+    const c=na.localeCompare(nb,"tr-TR",{sensitivity:"base"});
+    if(c!==0) return c;
+    const ta=a.activityStart?Date.parse(a.activityStart):a.createdAt;
+    const tb=b.activityStart?Date.parse(b.activityStart):b.createdAt;
+    return ta-tb;
+  });
+}
+function resizeAllCharts(){
+  try{
+    intervalComboChart && intervalComboChart.resize();
+    hrZoneChart && hrZoneChart.resize();
+    trendComboChart && trendComboChart.resize();
+    trendWeeklyChart && trendWeeklyChart.resize();
+    trendScatterChart && trendScatterChart.resize();
+    bestEffortsPaceChart && bestEffortsPaceChart.resize();
+    selectedBestEffortsPaceChart && selectedBestEffortsPaceChart.resize();
+    bestEffortsScatterChart && bestEffortsScatterChart.resize();
+
+    miniAvgPaceChart && miniAvgPaceChart.resize();
+    miniIntervalCountChart && miniIntervalCountChart.resize();
+    miniIntervalKmChart && miniIntervalKmChart.resize();
+    miniIntervalTimeChart && miniIntervalTimeChart.resize();
+    miniIntervalAvgPaceChart && miniIntervalAvgPaceChart.resize();
+    miniIntervalDensityChart && miniIntervalDensityChart.resize();
+    miniBestIntervalPaceChart && miniBestIntervalPaceChart.resize();
+    miniLongestIntervalChart && miniLongestIntervalChart.resize();
+    miniAvgHRChart && miniAvgHRChart.resize();
+    miniMaxHRChart && miniMaxHRChart.resize();
+    miniAvgCadChart && miniAvgCadChart.resize();
+    miniMaxCadChart && miniMaxCadChart.resize();
+    miniZ45Chart && miniZ45Chart.resize();
+    pace530ComboChart && pace530ComboChart.resize();
+    /* ✅ EK: stride scatter resize */
+    cadStrideSelectedChart && cadStrideSelectedChart.resize();
+    cadStrideTrendChart && cadStrideTrendChart.resize();
+    fastSegRunTrendChart && fastSegRunTrendChart.resize();
+
+for(const m of selectedBestSegMaps.values()){
+  try{ m.invalidateSize(); }catch(e){}
+}
+
+  }catch(e){}
+}
+
+/* ==========================
+   ✅ EK: Scatter çizimleri
+   - Seçili koşu
+   - Trend (filtreli tüm koşular)
+========================== */
+function uniquePointsByXY(points){
+  const seen = new Set();
+  const out = [];
+  for(const p of points){
+    // x ve y tam sayı olsun (cad zaten integer gibi, stride de round'lanıyor)
+    const x = Math.round(p.x);
+    const y = Math.round(p.y);
+    const key = `${x}|${y}`;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push({ x, y });
+  }
+  return out;
+}
+function downsamplePoints(points, maxPoints=8000){
+  if(points.length<=maxPoints) return points;
+  const step = Math.ceil(points.length / maxPoints);
+  const out = [];
+  for(let i=0;i<points.length;i+=step) out.push(points[i]);
+  return out;
+}
+function renderStrideCadenceHistogram(points, strideValue, selectedCad=null){
+  try{
+    if(!strideCadenceHistCanvas) return;
+
+    if(strideCadenceHistChart){
+      strideCadenceHistChart.destroy();
+      strideCadenceHistChart = null;
+    }
+
+    if(!points?.length || strideValue == null){
+      if(strideCadSummaryEl) strideCadSummaryEl.textContent = "Veri yok / stride seçilmedi.";
+      return;
+    }
+
+    // Seçili stride’a göre filtrele (stride integer cm)
+    const filtered = points.filter(p => p?.y === strideValue && isFinite(p?.x));
+
+    if(!filtered.length){
+      if(strideCadSummaryEl) strideCadSummaryEl.innerHTML =
+        `Stride <b>${strideValue} cm</b> için nokta bulunamadı.`;
+      return;
+    }
+
+    // Cadence frekans sayımı
+    const freq = new Map();
+    for(const p of filtered){
+      const cad = Math.round(p.x);
+      freq.set(cad, (freq.get(cad) || 0) + 1);
+    }
+
+    // X ekseni: CAD_MIN..CAD_MAX (boşları 0)
+    const labels = [];
+    const data = [];
+    const colors = [];
+
+    for(let cad = CAD_MIN; cad <= CAD_MAX; cad++){
+      labels.push(String(cad));
+      const c = freq.get(cad) || 0;
+      data.push(c);
+
+      // ✅ Highlight: tıklanan cadence barı farklı renk
+      if(selectedCad != null && cad === selectedCad){
+        colors.push("rgba(245, 158, 11, 0.75)"); // amber
+      }else{
+        colors.push("rgba(37, 99, 235, 0.35)"); // blue
+      }
+    }
+
+    const total = filtered.length;
+    const peakCad = [...freq.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0];
+    const clickedCount = (selectedCad != null) ? (freq.get(selectedCad) || 0) : null;
+
+    // ✅ Detay metni (tıklanan nokta varsa onu da yaz)
+    if(strideCadSummaryEl){
+      strideCadSummaryEl.innerHTML =
+        `Stride <b>${strideValue} cm</b> • Nokta: <b>${total}</b> • En sık cadence: <b>${peakCad ?? "-"}</b> spm`
+        + (selectedCad != null
+            ? ` • Seçilen: <b>${selectedCad} spm</b> → <b>${clickedCount}</b> kez`
+            : "");
+    }
+
+    strideCadenceHistChart = new Chart(strideCadenceHistCanvas.getContext("2d"),{
+      type:"bar",
+      data:{
+        labels,
+        datasets:[{
+          label:`Stride ${strideValue} cm → Cadence frekansı`,
+          data,
+          backgroundColor: colors,
+          borderColor: "#2563eb",
+          borderWidth: 1
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        interaction:{ mode:"nearest", intersect:false },
+        scales:{
+          x:{ title:{display:true,text:"Cadence (spm)"} },
+          y:{ title:{display:true,text:"Frekans (adet)"}, beginAtZero:true }
+        },
+        plugins:{
+          legend:{ display:false },
+          tooltip:{
+            callbacks:{
+              title:(items)=> items?.[0]?.label ? `Cadence: ${items[0].label} spm` : "",
+              label:(ctx)=> `Frekans: ${ctx.raw}`
+            }
+          }
+        }
+      }
+    });
+
+  }catch(e){
+    console.warn("renderStrideCadenceHistogram error:", e);
+  }
+}
+function renderCadStrideSelected(run){
+  try{
+    if(cadStrideSelectedChart){
+      cadStrideSelectedChart.destroy();
+      cadStrideSelectedChart=null;
+    }
+    if(!cadStrideSelectedCanvas) return;
+    if(!run?.gpxText) return;
+
+    const parsed = parseGPX(run.gpxText);
+    const pts = [];
+selectedCadenceForHist = null;
+    for(let i=0;i<parsed.pacePoint.length;i++){
+      const pace = parsed.pacePoint[i];
+      const cad  = normalizeCadValue(parsed.cads[i]);
+      const stride = strideCmFromPaceCad(pace, cad);
+
+      // ✅ İstenen eksen aralıklarına göre filtrele (70–190 / 70–190)
+      if(
+        isFinite(cad) && isFinite(stride) &&
+        cad >= CAD_MIN && cad <= CAD_MAX &&
+        stride >= STR_MIN && stride <= STR_MAX
+      ){
+        pts.push({ x: cad, y: Math.round(stride) });
+      }
+    }
+
+    const unique = uniquePointsByXY(pts);
+    const sampled = downsamplePoints(unique, 8000);
+    // ✅ Histogram için ham noktaları sakla (tekrarlar dahil)
+    selectedStrideCadPoints = pts.slice();
+    // ✅ Stride seçeneklerini oluştur (y=round stride)
+    if(strideSelectEl){
+      const strides = Array.from(new Set(pts.map(p=>p.y))).sort((a,b)=>a-b);
+
+      // mevcut seçimi koru
+      const prev = strideSelectEl.value ? parseInt(strideSelectEl.value,10) : null;
+
+      strideSelectEl.innerHTML = "";
+      for(const s of strides){
+        const opt = document.createElement("option");
+        opt.value = String(s);
+        opt.textContent = `${s} cm`;
+        strideSelectEl.appendChild(opt);
+      }
+
+      // varsayılan stride seç: önceki varsa onu, yoksa medyan gibi bir seçim
+      let selected = (prev!=null && strides.includes(prev)) ? prev : (strides[Math.floor(strides.length/2)] ?? null);
+      if(selected!=null) strideSelectEl.value = String(selected);
+
+      // ilk çizim
+      renderStrideCadenceHistogram(selectedStrideCadPoints, selected);
+    }
+
+    if(cadStrideSelectedSummaryEl){
+      cadStrideSelectedSummaryEl.innerHTML =
+        `Toplam nokta: <b>${pts.length}</b> • Gösterilen (downsample): <b>${sampled.length}</b>
+         <br><small>Kesikli eğriler = 03:00 / 04:00 / 05:00 / 06:00 pace referansı</small>`;
+    }
+
+    if(!sampled.length) return;
+
+    cadStrideSelectedChart = new Chart(cadStrideSelectedCanvas.getContext("2d"),{
+      data:{
+        datasets:[
+          // ✅ Pace "bölge çizgileri" (referans eğriler) — arkada
+          buildPaceLineDataset(3.0, "03:00/km", "#0d622c"),
+          buildPaceLineDataset(3.5, "03:30/km", "#16a34a"),
+          buildPaceLineDataset(4.0, "04:00/km", "#0e3895"),
+          buildPaceLineDataset(4.5, "04:30/km", "#2563eb"),
+          buildPaceLineDataset(5.0, "05:00/km", "#c57f08"),
+          buildPaceLineDataset(5.5, "05:30/km", "#f59e0b"),
+          buildPaceLineDataset(6.0, "06:00/km", "#ef4444"),
+          buildPaceLineDataset(7.0, "07:00/km", "#000000"),
+
+          // ✅ Seçili koşu noktaları — üstte (senin mevcut stilin)
+          {
+            type:"scatter",
+            label:"Seçili Koşu",
+            data: sampled,
+            pointRadius:2.6,
+            pointHoverRadius:5,
+            backgroundColor:"rgba(37,99,235,0.55)"
+          }
+        ]
+      },
+      options:{
+        onClick: (evt, elements, chart) => {
+  if(!elements?.length) return;
+
+  const el = elements[0];
+  const ds = chart.data.datasets[el.datasetIndex];
+
+  // çizgi datasetlerine basılmasın
+  if(ds.type === "line") return;
+
+  const p = ds.data[el.index];
+
+  // ✅ tıklanan noktanın stride ve cadence değeri
+  const clickedStride = Math.round(p.y);
+  const clickedCad    = Math.round(p.x);
+
+  // global seçimi tut
+  selectedCadenceForHist = clickedCad;
+
+  // dropdown stride’ı set et
+  if(strideSelectEl){
+    strideSelectEl.value = String(clickedStride);
+  }
+
+  // ✅ histogramı stride + cadence detayıyla çiz
+  renderStrideCadenceHistogram(selectedStrideCadPoints, clickedStride, clickedCad);
+
+  // (opsiyonel) histogram bölümüne kaydır
+  try{
+    strideCadenceHistCanvas?.scrollIntoView({behavior:"smooth", block:"center"});
+  }catch(e){}
+},
+        responsive:true,
+        maintainAspectRatio:false,
+        interaction:{ mode:"nearest", intersect:false },
+        plugins:{
+          // senin dosyada legend kapalıydı — değiştirmiyorum
+          legend:{ display:false },
+
+          // pace çizgilerinde tooltip çıkmasın (yalnızca noktalar tooltip alsın)
+          tooltip:{
+            filter:(ctx)=> ctx.dataset.type !== "line"
+          }
+        },
+        // ✅ Eksen aralıkları sabit: 70–190 cadence, 70–190 stride
+        scales:{
+          x:{
+            type:"linear",
+            min: CAD_MIN,
+            max: CAD_MAX,
+            title:{display:true,text:"Cadence (spm)"},
+            ticks:{ stepSize: 2 }
+          },
+          y:{
+            min: STR_MIN,
+            max: STR_MAX,
+            title:{display:true,text:"Adım Uzunluğu (cm)"}
+          }
+        }
+      }
+    });
+
+  }catch(e){
+    console.warn("renderCadStrideSelected error:", e);
+  }
+}
+
+function renderCadStrideTrend(allRuns){
+  try{
+    if(cadStrideTrendChart){
+      cadStrideTrendChart.destroy();
+      cadStrideTrendChart=null;
+    }
+    if(!cadStrideTrendCanvas) return;
+
+    const runs = filterRunsByRange(allRuns || []);
+    const pts = [];
+
+    for(const run of runs){
+      if(!run?.gpxText) continue;
+      let parsed;
+      try{ parsed = parseGPX(run.gpxText); }catch{ continue; }
+
+      for(let i=0;i<parsed.pacePoint.length;i++){
+        const pace = parsed.pacePoint[i];
+        const cad  = normalizeCadValue(parsed.cads[i]);
+        const stride = strideCmFromPaceCad(pace, cad);
+
+        // ✅ Seçili koşu ile aynı eksen aralığına göre filtre
+        if(
+          isFinite(cad) && isFinite(stride) &&
+          cad >= CAD_MIN && cad <= CAD_MAX &&
+          stride >= STR_MIN && stride <= STR_MAX
+        ){
+          pts.push({ x: cad, y: Math.round(stride) });
+        }
+      }
+    }
+
+    const unique = uniquePointsByXY(pts);
+    const sampled = downsamplePoints(unique, 12000);
+
+    if(cadStrideTrendSummaryEl){
+      cadStrideTrendSummaryEl.innerHTML =
+        `Filtreli koşu sayısı: <b>${runs.length}</b> • Toplam nokta: <b>${pts.length}</b> • Gösterilen: <b>${sampled.length}</b>
+         <br><small>Kesikli eğriler = 03:00 / 04:00 / 05:00 / 06:00 pace referansı</small>`;
+    }
+
+    if(!sampled.length) return;
+
+    cadStrideTrendChart = new Chart(cadStrideTrendCanvas.getContext("2d"),{
+      data:{
+        datasets:[
+          // ✅ Pace referans eğrileri (arkada)
+          buildPaceLineDataset(3.0, "03:00/km", "#0d622c"),
+          buildPaceLineDataset(3.5, "03:30/km", "#16a34a"),
+          buildPaceLineDataset(4.0, "04:00/km", "#0e3895"),
+          buildPaceLineDataset(4.5, "04:30/km", "#2563eb"),
+          buildPaceLineDataset(5.0, "05:00/km", "#c57f08"),
+          buildPaceLineDataset(5.5, "05:30/km", "#f59e0b"),
+          buildPaceLineDataset(6.0, "06:00/km", "#ef4444"),
+          buildPaceLineDataset(7.0, "07:00/km", "#000000"),
+
+          // ✅ Trend noktaları (üstte) — senin mevcut stilin korunur
+          {
+            type:"scatter",
+            label:"Trend",
+            data: sampled,
+            pointRadius:2.2,
+            pointHoverRadius:4.2,
+            backgroundColor:"rgba(30,58,138,0.35)"
+          }
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        interaction:{ mode:"nearest", intersect:false },
+        plugins:{
+          legend:{ display:false }, // ✅ senin trend grafiğindeki gibi
+          tooltip:{
+            // ✅ pace çizgilerinde tooltip istemiyoruz
+            filter:(ctx)=> ctx.dataset.type !== "line"
+          }
+        },
+        // ✅ Eksenler sabit (senin istediğin aralık): 70–190 cadence, 70–190 stride
+        scales:{
+          x:{
+            type:"linear",
+            min: CAD_MIN,
+            max: CAD_MAX,
+            title:{display:true,text:"Cadence (spm)"},
+            ticks:{ stepSize: 2 }
+          },
+          y:{
+            min: STR_MIN,
+            max: STR_MAX,
+            title:{display:true,text:"Adım Uzunluğu (cm)"}
+          }
+        }
+      }
+    });
+
+  }catch(e){
+    console.warn("renderCadStrideTrend error:", e);
+  }
+}
+
+/* ==========================
+   Trend dashboard (orijinal)
+========================== */
+function renderTrendDashboard(allRuns){
+  try{
+    if(typeof Chart === "undefined"){
+      setStatus("❌ Chart.js yüklenmedi (Chart undefined). CDN engelli olabilir.", "bad");
+      return;
+    }
+
+    const filtered = filterRunsByRange(allRuns);
+    if(!filtered || filtered.length===0){
+      trendTableBody.innerHTML="";
+      // ✅ EK: trend stride grafiği temizle
+      if(cadStrideTrendChart){ cadStrideTrendChart.destroy(); cadStrideTrendChart=null; }
+      return;
+    }
+
+    const sortedByName = sortRunsByName(filtered);
+    const labels = makeUniqueLabels(sortedByName.map(r=>r.name||"Run"));
+    const hrMax = parseInt(hrMaxInput.value || "190",10);
+
+    // ① Combo
+    const comboDist = sortedByName.map(r=>computeIntervalTotals(r).intervalKm);
+    const comboPace = sortedByName.map(r=>computeIntervalTotals(r).intervalAvgPace);
+    const comboCad  = sortedByName.map(r => isIntervalWorkout(r) ? intervalCadenceAvg(r) : null);
+
+    if(trendComboChart) trendComboChart.destroy();
+    trendComboChart = new Chart(document.getElementById("trendComboChart").getContext("2d"),{
+       plugins: [targetBandPlugin],
+      data:{
+        labels,
+        datasets:[
+          { type:"bar", label:"Interval Mesafe (km)", data:comboDist, yAxisID:"yDist",
+            backgroundColor:"rgba(37,99,235,0.25)", borderColor:"#2563eb", borderWidth:1 },
+          { type:"line", label:"Interval Avg Pace", data:comboPace, yAxisID:"yPace",
+            borderColor:"#000000", tension:0.25, spanGaps:false,
+            pointRadius:(ctx)=> (ctx.raw==null ? 0 : 3),
+            pointHoverRadius:(ctx)=> (ctx.raw==null ? 0 : 5)
+          },
+          { type:"line", label:"Interval Avg Cadence (spm)", data:comboCad, yAxisID:"yCad",
+            borderColor:"#10b981", tension:0.25, spanGaps:false,
+            pointRadius:(ctx)=> (ctx.raw==null ? 0 : 3),
+            pointHoverRadius:(ctx)=> (ctx.raw==null ? 0 : 5)
+          }
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        scales:{
+          yDist:{ position:"left", title:{display:true,text:"km"} },
+          yPace:{ position:"right", reverse:true, grid:{drawOnChartArea:false}, title:{display:true,text:"Pace (MM:SS)"},
+            ticks: paceTicks(14) },
+          yCad:{ position:"right", offset:true, grid:{drawOnChartArea:false}, title:{display:true,text:"Cadence (spm)"} },
+          x:{ ticks:{maxRotation:45,minRotation:45,autoSkip:true} }
+        },
+        plugins:{
+  legend:{ display:false },
+
+  targetBandPlugin:{
+    enabled: true,
+    ranges:[
+      {
+        min: parsePaceMMSS("03:30"),
+        max: parsePaceMMSS("04:00"),
+        color:"rgba(59,130,246,0.15)"   // 🔵 hızlı zone
+      },
+      {
+        min: parsePaceMMSS("04:00"),
+        max: parsePaceMMSS("04:30"),
+        color:"rgba(34,197,94,0.15)"    // 🟩 race pace
+      }]
+  }
+}
+      }
+    });
+
+    // ② Weekly
+    // ② Weekly (Interval km + Total km + Interval %)
+  const weeklyInt = new Map();
+  const weeklyTot = new Map();
+
+  filtered.forEach(r=>{
+    const t0 = r.activityStart ? new Date(r.activityStart) : new Date(r.createdAt);
+    const key = isoWeekKey(t0);
+
+    // intervalKm: interval toplamı
+    const itKm  = (computeIntervalTotals(r).intervalKm || 0);
+
+    // totalDistKm: koşunun toplam mesafesi (run objende var)
+    const totKm = (r.totalDistKm || 0);
+
+    weeklyInt.set(key, (weeklyInt.get(key) || 0) + itKm);
+    weeklyTot.set(key, (weeklyTot.get(key) || 0) + totKm);
+  });
+
+  const weekKeys = Array.from(new Set([...weeklyTot.keys(), ...weeklyInt.keys()])).sort();
+  const weekIntVals = weekKeys.map(k => +(weeklyInt.get(k) || 0).toFixed(2));
+  const weekTotVals = weekKeys.map(k => +(weeklyTot.get(k) || 0).toFixed(2));
+  const weekPctVals = weekKeys.map((k, idx) => {
+    const tot = weekTotVals[idx];
+    const it  = weekIntVals[idx];
+    return (tot > 0) ? +(it / tot * 100).toFixed(1) : null;
+  });
+
+  // ✅ %20 referans çizgisi (HER HAFTA SABİT)
+  const week20Line = weekKeys.map(() => 20);
+
+  if(trendWeeklyChart) trendWeeklyChart.destroy();
+  trendWeeklyChart = new Chart(document.getElementById("trendWeeklyChart").getContext("2d"),{
+    data:{
+      labels: weekKeys,
+      datasets:[
+        {
+          type:"bar",
+          label:"Haftalık Toplam Mesafe (km)",
+          data: weekTotVals,
+          yAxisID:"yKm",
+          backgroundColor:"rgba(148,163,184,0.35)",
+          borderColor:"#94a3b8",
+          borderWidth:1,
+          order:2
+        },
+        {
+          type:"bar",
+          label:"Haftalık Interval Mesafesi (km)",
+          data: weekIntVals,
+          yAxisID:"yKm",
+          backgroundColor:"rgba(16,185,129,0.55)",
+          borderColor:"#10b981",
+          borderWidth:1,
+          order:1
+        },
+        {
+          type:"line",
+          label:"Interval / Total (%)",
+          data: weekPctVals,
+          yAxisID:"yPct",
+          borderColor:"#ef4444",
+          tension:0.25,
+          spanGaps:true,
+          pointRadius:(ctx)=> (ctx.raw==null ? 0 : 3),
+          pointHoverRadius:(ctx)=> (ctx.raw==null ? 0 : 5),
+          order:0
+        },
+
+// ✅ EK: %20 referans çizgisi
+      {
+        type: "line",
+        label: "Referans: %20",
+        data: week20Line,
+        yAxisID: "yPct",
+        borderColor: "rgba(148,163,184,0.95)",
+        borderWidth: 2,
+        borderDash: [8,6],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        tension: 0,
+        spanGaps: true,
+        order: -1
+      }
+
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{ mode:"nearest", intersect:false },
+      scales:{
+        yKm:{
+          position:"left",
+          title:{ display:true, text:"km" }
+        },
+        yPct:{
+          position:"right",
+          min:0,
+          suggestedMax:100,
+          grid:{ drawOnChartArea:false },
+          title:{ display:true, text:"%" },
+          ticks:{ callback:(v)=> v + "%" }
+        },
+        x:{ ticks:{ maxRotation:45, minRotation:45, autoSkip:true } }
+      },
+      plugins:{
+        tooltip:{
+
+          callbacks:{
+            label:(ctx)=>{
+              const dsLabel = ctx.dataset.label || "";
+              const v = ctx.raw;
+              if(dsLabel.includes("%")) return `${dsLabel}: ${v==null ? "-" : v + "%"}`;
+              return `${dsLabel}: ${v==null ? "-" : v} km`;
+            },
+            afterBody:(items)=>{
+              try{
+                const idx = items?.[0]?.dataIndex;
+                if(idx==null) return "";
+                const tot = weekTotVals[idx];
+                const it  = weekIntVals[idx];
+                if(tot<=0) return "";
+                const pct = it/tot*100;
+                return [`Interval oranı: ${pct.toFixed(1)}%`];
+              }catch(e){
+                return "";
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+    // ③ Scatter
+    const scatterPoints = sortedByName.map(r=>{
+      const it=computeIntervalTotals(r);
+      return { x: it.intervalKm ?? null, y: it.intervalAvgPace ?? null };
+    }).filter(p=>p.x!=null && p.y!=null && isFinite(p.x) && isFinite(p.y));
+    if(trendScatterChart) trendScatterChart.destroy();
+    trendScatterChart=new Chart(document.getElementById("trendScatterChart").getContext("2d"),{
+  plugins:[targetBandPlugin],
+
+  type:"scatter",
+  data:{
+    datasets:[
+      {
+        label:"Koşular",
+        data:scatterPoints,
+        backgroundColor:"rgba(99,102,241,0.7)"
+      }
+    ]
+  },
+
+  options:{
+    responsive:true,
+    maintainAspectRatio:false,
+
+    scales:{
+      x:{
+        title:{display:true,text:"Interval Mesafe (km)"}
+      },
+      y:{
+        title:{display:true,text:"Interval Avg Pace (MM:SS)"},
+        reverse:true,
+        ticks: paceTicks(14)
+      }
+    },
+
+    plugins:{
+      legend:{display:false},
+
+      targetBandPlugin:{
+        enabled:true,
+        ranges:[
+          {
+            min: parsePaceMMSS("03:30"),
+            max: parsePaceMMSS("04:00"),
+            color:"rgba(59,130,246,0.15)"
+          },
+          {
+            min: parsePaceMMSS("04:00"),
+            max: parsePaceMMSS("04:30"),
+            color:"rgba(34,197,94,0.15)"
+          }
+        ]
+      }
+    }
+  }
+});
+
+    // Table DESC
+    const sheetSorted = filtered.slice().sort((a,b)=>{
+      const ta=a.activityStart?Date.parse(a.activityStart):a.createdAt;
+      const tb=b.activityStart?Date.parse(b.activityStart):b.createdAt;
+      return tb-ta;
+    });
+    const sheetLabels = makeUniqueLabels(sheetSorted.map(r=>r.name||"Run"));
+
+    trendTableBody.innerHTML="";
+    sheetSorted.forEach((r,i)=>{
+      const it=computeIntervalTotals(r);
+      const totalDistKm=r.totalDistKm ?? 0;
+      const totalTimeSec=r.totalTimeSec ?? 0;
+      const avgPaceAll = totalDistKm>0 ? (totalTimeSec/60)/totalDistKm : null;
+
+      let z4z5Min=null;
+      if(r.gpxText){
+        try{
+          const parsed=parseGPX(r.gpxText);
+          const z=computeHRZones(parsed.times, parsed.hrs, hrMax);
+          z4z5Min=z.z4z5Sec/60;
+        }catch{ z4z5Min=null; }
+      }
+      const startShown = r.activityStart ? fmtDateTimeTR(r.activityStart) : fmtDateTimeTR(r.createdAt);
+
+      const tr=document.createElement("tr");
+      tr.innerHTML = `
+        <td>${sheetLabels[i]}</td>
+        <td>${startShown}</td>
+        <td>${totalDistKm.toFixed(2)} km</td>
+        <td>${Math.round(totalTimeSec)} sn</td>
+        <td>${formatPace(avgPaceAll)}</td>
+        <td>${it.intervalCount}</td>
+        <td>${it.intervalKm.toFixed(2)} km</td>
+        <td>${it.intervalTimeMin.toFixed(1)} dk</td>
+        <td>${formatPace(it.intervalAvgPace)}</td>
+        <td>${it.intervalDensityPct!=null ? it.intervalDensityPct.toFixed(1)+"%" : "-"}</td>
+        <td>${formatPace(it.bestIntervalPace)}</td>
+        <td>${it.longestIntervalM!=null ? Math.round(it.longestIntervalM)+" m" : "-"}</td>
+        <td>${r.avgHR ?? "-"}</td>
+        <td>${r.maxHR ?? "-"}</td>
+        <td>${normalizeCadValue(r.avgCad) ?? "-"}</td>
+        <td>${normalizeCadValue(r.maxCad) ?? "-"}</td>
+        <td>${z4z5Min!=null ? z4z5Min.toFixed(1)+" dk" : "-"}</td>
+      `;
+      trendTableBody.appendChild(tr);
+    });
+
+    // Mini series
+    const mini = { avgPace:[], intCount:[], intKm:[], intTime:[], intAvgPace:[], intDensity:[], bestIntPace:[], longestIntM:[], avgHR:[], maxHR:[], avgCad:[], maxCad:[], z45:[] };
+
+    sortedByName.forEach(r=>{
+      const it=computeIntervalTotals(r);
+      const totalDistKm=r.totalDistKm ?? 0;
+      const totalTimeSec=r.totalTimeSec ?? 0;
+      const avgPaceAll = totalDistKm>0 ? (totalTimeSec/60)/totalDistKm : null;
+
+      let z4z5Min=null;
+      if(r.gpxText){
+        try{
+          const parsed=parseGPX(r.gpxText);
+          const z=computeHRZones(parsed.times, parsed.hrs, hrMax);
+          z4z5Min=z.z4z5Sec/60;
+        }catch{ z4z5Min=null; }
+      }
+
+      mini.avgPace.push(avgPaceAll);
+      mini.intCount.push(it.intervalCount ?? 0);
+      mini.intKm.push(it.intervalKm ?? 0);
+      mini.intTime.push(it.intervalTimeMin ?? null);
+      mini.intAvgPace.push(it.intervalAvgPace ?? null);
+      mini.intDensity.push(it.intervalDensityPct ?? null);
+      mini.bestIntPace.push(it.bestIntervalPace ?? null);
+      mini.longestIntM.push(it.longestIntervalM ?? null);
+      mini.avgHR.push(r.avgHR ?? null);
+      mini.maxHR.push(r.maxHR ?? null);
+      mini.avgCad.push(normalizeCadValue(r.avgCad) ?? null);
+      mini.maxCad.push(normalizeCadValue(r.maxCad) ?? null);
+      mini.z45.push(z4z5Min);
+    });
+
+    renderMiniTrendCharts(labels, mini);
+    renderBestEffortsScatterChart(allRuns);
+
+    /* ✅ EK: trend stride scatter render */
+    renderCadStrideTrend(allRuns);
+    renderFastSegRunTrend(allRuns);
+
+  }catch(e){
+    console.error(e);
+    setStatus("❌ Trend dashboard hata: " + (e?.message || e), "bad");
+    setTimeout(()=>setStatus("", ""), 6000);
+  }
+}
+
+/* ==========================
+   Interval Combo Chart (seçili koşu)
+========================== */
+function renderIntervalComboChart(run){
+  const intervals = run.intervals || [];
+  if(intervalComboChart){ intervalComboChart.destroy(); intervalComboChart=null; }
+  if(intervals.length === 0){
+    targetBandSummaryEl.innerHTML = "Interval yok.";
+    return;
+  }
+
+  const bandMin = parsePaceMMSS(targetPaceMinEl.value);
+  const bandMax = parsePaceMMSS(targetPaceMaxEl.value);
+  const showBand = showTargetBandEl.checked;
+
+  const labels = intervals.map(i => `#${i.id} • ${Math.round(i.dist)}m • ${i.type}`);
+  const durData = intervals.map(i => i.time);
+  const paceAvgData = intervals.map(i => i.pace);
+  const paceMaxData = intervals.map(i => i.paceMax);
+  const hrAvgData   = intervals.map(i => i.hrAvg);
+  const cadAvgData  = intervals.map(i => normalizeCadValue(i.cadAvg));
+
+  const pointColors = intervals.map(i => paceColor(i.pace, bandMin, bandMax));
+
+  intervalComboChart = new Chart(document.getElementById("intervalComboChart").getContext("2d"),{
+    plugins:[targetBandPlugin],
+    data:{
+      labels,
+      datasets:[
+        { type:"bar", label:"Süre (sn)", data:durData, yAxisID:"yTime",
+          backgroundColor:"rgba(37, 99, 235, 0.25)", borderColor:"#2563eb", borderWidth:1 },
+        { type:"line", label:"Avg Pace", data:paceAvgData, yAxisID:"yPace",
+          borderColor:"#000000", pointRadius:4, pointHoverRadius:5,
+          pointBackgroundColor:pointColors, pointBorderColor:pointColors, tension:0.25 },
+        { type:"line", label:"Max Pace (en hızlı)", data:paceMaxData, yAxisID:"yPace",
+          borderColor:"#7c3aed", borderDash:[7,4], pointRadius:4, tension:0.25, spanGaps:true },
+        { type:"line", label:"Avg HR", data:hrAvgData, yAxisID:"yHR",
+          borderColor:"#e11d48", pointRadius:3, tension:0.25, spanGaps:true },
+        { type:"line", label:"Avg Cadence", data:cadAvgData, yAxisID:"yCad",
+          borderColor:"#10b981", pointRadius:3, tension:0.25, spanGaps:true }
+      ]
+    },
+    options:{
+      responsive:true,
+      scales:{
+        yTime:{ position:"left", title:{display:true,text:"Süre (sn)"} },
+        yCad:{ position:"left", offset:true, grid:{ drawOnChartArea:false }, title:{display:true,text:"Cadence (spm)"} },
+        yPace:{ position:"right", reverse:true, grid:{ drawOnChartArea:false }, title:{display:true,text:"Pace (MM:SS)"},
+          ticks: paceTicks(14) },
+        yHR:{ position:"right", offset:true, grid:{ drawOnChartArea:false }, title:{display:true,text:"HR (bpm)"} }
+      },
+      plugins:{
+        targetBandPlugin:{
+  enabled:true,
+  ranges:[
+    {
+      min: parsePaceMMSS("03:30"),
+      max: parsePaceMMSS("04:00"),
+      color:"rgba(59,130,246,0.15)"   // 🔵 hızlı zone
+    },
+    {
+      min: parsePaceMMSS("04:00"),
+      max: parsePaceMMSS("04:30"),
+      color:"rgba(34,197,94,0.15)"    // 🟩 race pace
+    }
+  ]
+}
+      }
+    }
+  });
+}
+
+/* ==========================
+   Render selected run
+========================== */
+function renderRun(run){
+  if(run.gpxText){
+    try{ drawRouteByPace(run.gpxText); }catch(e){ console.warn(e); }
+  }
+
+  const totalTimeSec=run.totalTimeSec ?? 0;
+  const totalDistKm=run.totalDistKm ?? 0;
+  const avgP = totalDistKm>0 ? (totalTimeSec/60)/totalDistKm : null;
+  const startShown = run.activityStart ? fmtDateTimeTR(run.activityStart) : fmtDateTimeTR(run.createdAt);
+
+  runSummaryEl.innerHTML = `
+    <div><b>Koşu:</b> ${run.name || ""}</div>
+    <div><b>Aktivite Başlangıcı:</b> ${startShown}</div>
+    <div><b>Toplam Mesafe:</b> ${totalDistKm.toFixed(2)} km</div>
+    <div><b>Toplam Süre:</b> ${Math.round(totalTimeSec)} sn</div>
+    <div><b>Avg Pace:</b> ${formatPace(avgP)}</div>
+    <div><b>Avg HR / Max HR:</b> ${run.avgHR ?? "-"} / ${run.maxHR ?? "-"}</div>
+    <div><b>Avg Cadence / Max Cadence:</b> ${normalizeCadValue(run.avgCad) ?? "-"} / ${normalizeCadValue(run.maxCad) ?? "-"} spm</div>
+    ${buildSelectedRunBestEffortsHtml(run)}
+  `;
+  requestAnimationFrame(() => renderSelectedBestEffortsPaceChart(run));
+
+  // Algılanan intervals table
+  intervalTableEl.innerHTML="";
+  (run.intervals||[]).forEach(i=>{
+    intervalTableEl.innerHTML += `
+      <tr class="interval">
+        <td>${i.id}</td>
+        <td>${fmtTimeISO(new Date(i.start))}</td>
+        <td>${fmtTimeISO(new Date(i.end))}</td>
+        <td>${i.time.toFixed(1)}</td>
+        <td>${Math.round(i.dist)} m</td>
+        <td>${formatPace(i.pace)}</td>
+        <td>${i.hrAvg ? `<span class="hr-badge">${i.hrAvg} bpm</span>` : "-"}</td>
+        <td>${normalizeCadValue(i.cadAvg) ?? "-"}</td>
+        <td>${i.type}</td>
+      </tr>
+    `;
+  });
+
+  // fast segments
+  fastSegTableEl.innerHTML="";
+  let fastSegs=[];
+  try{
+    if(run.gpxText){
+      const parsed = parseGPX(run.gpxText);
+      fastSegs = detectFastPaceSegmentsFromParsed(parsed);
+      renderFastSegmentsChart(fastSegs);
+    }
+  }catch(e){
+    console.warn("fast segments error:", e);
+    fastSegs = [];
+  }
+
+  if(!fastSegs.length){
+    fastSegSummaryEl.innerHTML = `⚡ pace < ${formatPace(FAST_PACE_THRESHOLD)} ve ≥ ${FAST_MIN_CONT_SEC} sn kesintisiz blok bulunamadı.`;
+  }else{
+    const totSec = fastSegs.reduce((a,x)=>a+(x.time||0),0);
+    const totM   = fastSegs.reduce((a,x)=>a+(x.dist||0),0);
+    const best   = Math.min(...fastSegs.map(x=>x.paceBest).filter(v=>v!=null && isFinite(v)));
+    const avgAll = totM>0 ? ((totSec/60)/(totM/1000)) : null;
+
+    fastSegSummaryEl.innerHTML = `
+      ⚡ <b>${fastSegs.length}</b> blok bulundu.
+      &nbsp;|&nbsp; <b>Toplam:</b> ${(totM/1000).toFixed(2)} km, ${formatDurationShort(totSec)}
+      &nbsp;|&nbsp; <b>Ort:</b> ${formatPace(avgAll)}/km
+      &nbsp;|&nbsp; <b>En hızlı:</b> ${formatPace(best)}/km
+    `;
+
+    fastSegs.forEach(s=>{
+      fastSegTableEl.innerHTML += `
+        <tr class="interval">
+          <td>${s.id}</td>
+          <td>${fmtTimeISO(new Date(s.start))}</td>
+          <td>${fmtTimeISO(new Date(s.end))}</td>
+          <td>${s.time.toFixed(1)}</td>
+          <td>${Math.round(s.dist)} m</td>
+          <td><b>${formatPace(s.pace)}</b></td>
+          <td>${formatPace(s.paceBest)}</td>
+          <td>${s.hrAvg ? `<span class="hr-badge">${s.hrAvg} bpm</span>` : "-"}</td>
+          <td>${s.cadAvg ?? "-"}</td>
+          <td>${s.type}</td>
+        </tr>
+      `;
+    });
+  }
+
+  const it = computeIntervalTotals(run);
+  intervalSummaryEl.innerHTML = it.intervalCount
+    ? `<b>Toplam Interval Mesafesi:</b> ${it.intervalKm.toFixed(2)} km | <b>Interval Sayısı:</b> ${it.intervalCount} | <b>Yoğunluk:</b> ${it.intervalDensityPct!=null?it.intervalDensityPct.toFixed(1)+"%":"-"}`
+    : "Interval tespit edilmedi.";
+
+  coachCommentEl.innerHTML = (it.intervalCount>=2)
+    ? `🧠 <span class="good">Interval verisi mevcut</span>`
+    : "🧠 Yeterli interval yok.";
+
+  renderIntervalComboChart(run);
+  renderHRZonesFromRun(run);
+
+  /* ✅ EK: Seçili koşu cadence↔stride scatter */
+  renderCadStrideSelected(run);
+
+/* ✅ Yeni: seçili koşu best effort ayrı haritalar */
+renderSelectedRunBestSegmentMaps(run);
+
+  // ✅ EK: 05:30 altı pace blok grafiği
+    renderPace530ComboChart(run);
+
+  setTimeout(()=>{
+    try{ map.invalidateSize(); }catch(e){}
+    for(const m of selectedBestSegMaps.values()){
+      try{ m.invalidateSize(); }catch(e){}
+    }
+  }, 0);
+
+}
+
+/* ==========================
+   refreshRunList
+========================== */
+async function refreshRunList(){
+  const runsRaw = await getAllRuns();
+  const runs = runsRaw.slice().sort((a,b)=>{
+    const ta=a.activityStart?Date.parse(a.activityStart):a.createdAt;
+    const tb=b.activityStart?Date.parse(b.activityStart):b.createdAt;
+    return tb-ta;
+  });
+
+  runListEl.innerHTML="";
+  if(!runs.length){
+
+runListEl.innerHTML="<div>Henüz kayıt yok. GPX yükleyin.</div>";
+  renderTrendDashboard([]);
+  await updateBestEffortsAndTotals([]);
+
+  if(cadStrideSelectedChart){ cadStrideSelectedChart.destroy(); cadStrideSelectedChart=null; }
+  if(cadStrideTrendChart){ cadStrideTrendChart.destroy(); cadStrideTrendChart=null; }
+
+  destroySelectedBestSegMaps();
+  if(selectedBestSegMapsWrapEl) selectedBestSegMapsWrapEl.innerHTML = "";
+  if(selectedBestSegSummaryEl){
+    selectedBestSegSummaryEl.innerHTML = "Henüz kayıt yok. GPX yükleyin.";
+  }
+
+    return;
+  }
+
+  runs.forEach(run=>{
+    const startShown=run.activityStart?fmtDateTimeTR(run.activityStart):fmtDateTimeTR(run.createdAt);
+    const item=document.createElement("div");
+    item.className="run-item";
+    item.innerHTML=`
+      <div>
+        <div class="name">${run.name}</div>
+        <div class="meta">${startShown} • ${(run.totalDistKm||0).toFixed(2)} km</div>
+      </div>
+      <div>
+        <button data-id="${run.id}" data-act="load">Aç</button>
+        <button data-id="${run.id}" data-act="del">Sil</button>
+      </div>
+    `;
+    runListEl.appendChild(item);
+  });
+
+  runListEl.querySelectorAll("button").forEach(btn=>{
+    btn.addEventListener("click", async (e)=>{
+      const id=e.target.getAttribute("data-id");
+      const act=e.target.getAttribute("data-act");
+      if(act==="del"){
+        if(confirm("Bu koşu silinsin mi?")){
+          await deleteRun(id);
+          if(currentRunId===id) currentRunId=null;
+          await refreshRunList();
+        }
+      } else {
+        const run=await getRun(id);
+        currentRunId=id;
+        renderRun(run);
+      }
+    });
+  });
+
+  renderTrendDashboard(runsRaw);
+  await updateBestEffortsAndTotals(runsRaw);
+
+}
+
+/* ==========================
+   Import GPX
+========================== */
+btnImport.addEventListener("click", async ()=>{
+  try{
+    setStatus("", "");
+    const files=Array.from(fileInput.files||[]);
+    if(!files.length){ alert("Önce GPX seçin."); return; }
+
+    let saved=0, lastId=null;
+    for(const file of files){
+      setStatus(`⏳ İşleniyor: ${file.name} (${saved+1}/${files.length})`, "");
+      const text=await file.text();
+
+      const parsed=parseGPX(text);
+      const intervals = detectPaceBlocksFromParsed(
+  parsed,
+  5.0,   // 05:00 threshold
+  10,    // min süre (senin mevcut kural)
+  10     // ✅ GAP > 10 sec → blok kır
+);
+
+      const run={
+        id:`${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+        name:(file.name||"Run").replace(/\.gpx$/i,""),
+        createdAt:Date.now(),
+        activityStart:parsed.activityStart,
+        activityEnd:parsed.activityEnd,
+        gpxText:text,
+        polyline:parsed.coords,
+        totalDistKm:parsed.totalKm,
+        totalTimeSec:parsed.totalTimeSec,
+        avgHR:parsed.avgHR,
+        maxHR:parsed.maxHR,
+        avgCad:parsed.avgCad,
+        maxCad:parsed.maxCad,
+        elevGainM: parsed.elevGainM || 0,
+        intervals
+      };
+
+      await addRun(run);
+      saved++; lastId=run.id;
+    }
+
+    await refreshRunList();
+
+    if(lastId){
+      const run=await getRun(lastId);
+      currentRunId=lastId;
+      renderRun(run);
+    }
+
+    setStatus(`✅ ${saved} GPX kaydedildi.`, "good");
+    setTimeout(()=>setStatus("", ""), 3000);
+  }catch(err){
+    console.error(err);
+    alert("Yükleme hatası: "+(err?.message || err));
+  }
+});
+
+/* ==========================
+   Filter changes
+========================== */
+rangeFilterEl.addEventListener("change", async ()=>{
+  const runs=await getAllRuns();
+  renderTrendDashboard(runs);
+  await updateBestEffortsAndTotals(runs);
+
+    if(currentRunId){
+      const run = await getRun(currentRunId);
+      if(run) renderSelectedRunBestSegmentMaps(run);
+    }
+
+});
+hrMaxInput.addEventListener("change", async ()=>{
+  if(currentRunId){
+    const run=await getRun(currentRunId);
+    renderHRZonesFromRun(run);
+  }
+  const runs=await getAllRuns();
+  renderTrendDashboard(runs);
+  await updateBestEffortsAndTotals(runs);
+});
+
+/* ==========================
+   Fullscreen
+========================== */
+btnFullscreen.addEventListener("click", async ()=>{
+  try{
+    if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
+  }catch(err){
+    console.error(err);
+  }
+});
+document.addEventListener("fullscreenchange", ()=>{
+
+ setTimeout(()=>{
+    try{ map.invalidateSize(); }catch(e){}
+    for(const m of selectedBestSegMaps.values()){
+      try{ m.invalidateSize(); }catch(e){}
+    }
+    resizeAllCharts();
+  }, 60);
+
+});
+
+/* ==========================
+   CSV Export
+========================== */
+btnExportCSV.addEventListener("click", async ()=>{
+  try{
+    const runs = await getAllRuns();
+    const filtered = filterRunsByRange(runs);
+    const rows = [];
+    rows.push(["name","activityStart","totalDistKm","totalTimeSec","avgHR","maxHR","avgCad","maxCad"].join(","));
+    filtered.forEach(r=>{
+      rows.push([
+        `"${String(r.name||"").replaceAll('"','""')}"`,
+        `"${r.activityStart||""}"`,
+        (r.totalDistKm||0).toFixed(3),
+        Math.round(r.totalTimeSec||0),
+        (r.avgHR ?? ""),
+        (r.maxHR ?? ""),
+        (r.avgCad ?? ""),
+        (r.maxCad ?? "")
+      ].join(","));
+    });
+    const blob = new Blob([rows.join("\n")], {type:"text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "trend_datasheet.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert("CSV export hata: " + (e?.message || e));
+  }
+});
+if(strideSelectEl){
+  strideSelectEl.addEventListener("change", () => {
+    const s = parseInt(strideSelectEl.value, 10);
+    if(!isFinite(s)) return;
+
+    // ✅ manuel stride seçince cadence seçimi temizlenir
+    selectedCadenceForHist = null;
+
+    renderStrideCadenceHistogram(selectedStrideCadPoints, s, null);
+  });
+}
+/* ==========================
+   Init
+========================== */
+(async function init(){
+  await safeOpenDB();
+  await refreshRunList();
+})();
+</script>
+</body>
+</html>
